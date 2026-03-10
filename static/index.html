@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Research RAG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .tab-active {
+            border-bottom: 2px solid #3b82f6;
+            color: #3b82f6;
+        }
+        .chat-message {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .log-terminal {
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            background: #1e293b;
+            color: #e2e8f0;
+        }
+
+        /* Improved focus indicators for accessibility */
+        button:focus,
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: 2px solid #3b82f6;
+            outline-offset: 2px;
+        }
+
+        /* Better color contrast for gray text */
+        .text-gray-500 {
+            color: #6b7280 !important;
+        }
+
+        .text-gray-600 {
+            color: #4b5563 !important;
+        }
+
+        /* Tooltip styles */
+        .tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+
+        .tooltip .tooltip-text {
+            visibility: hidden;
+            width: 250px;
+            background-color: #1f2937;
+            color: #fff;
+            text-align: left;
+            border-radius: 6px;
+            padding: 8px;
+            position: absolute;
+            z-index: 1;
+            bottom: 125%;
+            left: 50%;
+            margin-left: -125px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+
+        .tooltip .tooltip-text::after {
+            content: "";
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: #1f2937 transparent transparent transparent;
+        }
+
+        .tooltip:hover .tooltip-text,
+        .tooltip:focus .tooltip-text {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="h-full bg-gray-50">
+    <div class="min-h-full">
+        <!-- Header -->
+        <header class="bg-white shadow">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">Medical Research RAG</h1>
+                        <p class="text-sm text-gray-500">Retrieval-Augmented Generation for Medical Documents</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div id="status-indicator" class="flex items-center space-x-2">
+                            <div class="h-3 w-3 rounded-full bg-gray-400"></div>
+                            <span class="text-sm text-gray-600">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auto-ingestion status banner -->
+            <div id="auto-ingest-banner" class="hidden border-t border-gray-200">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <div class="flex items-center space-x-3">
+                            <div id="auto-ingest-icon" class="spinner"></div>
+                            <div>
+                                <p id="auto-ingest-message" class="text-sm font-medium text-gray-700">Auto-ingesting PDFs...</p>
+                                <p id="auto-ingest-detail" class="text-xs text-gray-500"></p>
+                            </div>
+                        </div>
+                        <button onclick="dismissAutoIngestBanner()" id="auto-ingest-dismiss" class="text-sm text-gray-500 hover:text-gray-700 hidden">Dismiss</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Tabs -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-4 sm:space-x-8" role="tablist" aria-label="Main navigation">
+                    <button onclick="switchTab('ingest')" id="tab-ingest" role="tab" aria-selected="true" aria-controls="content-ingest" aria-label="Switch to Ingest tab (Alt+1)" class="tab-active py-4 px-3 sm:px-1 border-b-2 font-medium text-sm flex-1 sm:flex-none">
+                        📄 Ingest
+                    </button>
+                    <button onclick="switchTab('query')" id="tab-query" role="tab" aria-selected="false" aria-controls="content-query" aria-label="Switch to Query tab (Alt+2)" class="border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 py-4 px-3 sm:px-1 font-medium text-sm flex-1 sm:flex-none">
+                        💬 Query
+                    </button>
+                    <button onclick="switchTab('metrics')" id="tab-metrics" role="tab" aria-selected="false" aria-controls="content-metrics" aria-label="Switch to Metrics tab (Alt+3)" class="border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 py-4 px-3 sm:px-1 font-medium text-sm flex-1 sm:flex-none">
+                        📊 Metrics
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Ingest Tab -->
+            <div id="content-ingest" role="tabpanel" aria-labelledby="tab-ingest" class="space-y-6">
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">Upload PDFs</h2>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-center w-full">
+                            <label for="file-upload" class="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                                <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                    <svg class="w-10 h-10 mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                    </svg>
+                                    <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Click to upload</span> or drag and drop</p>
+                                    <p class="text-xs text-gray-500">PDF files only (max 50MB per file)</p>
+                                </div>
+                                <input id="file-upload" type="file" class="hidden" multiple accept=".pdf" aria-label="Upload PDF files" onchange="uploadFiles(this.files)">
+                            </label>
+                        </div>
+
+                        <div id="upload-status" class="hidden text-sm" role="status" aria-live="polite"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold text-gray-900">Start Ingestion</h2>
+                        <label class="flex items-center space-x-2">
+                            <input type="checkbox" id="reset-db" class="rounded text-blue-600">
+                            <span class="text-sm text-gray-600">Reset database</span>
+                        </label>
+                    </div>
+                    <button onclick="startIngestion()" id="ingest-button" aria-label="Start PDF ingestion process" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+                        Start Ingestion (upload files first)
+                    </button>
+
+                    <div id="ingestion-progress" class="mt-4 hidden" role="region" aria-label="Ingestion progress">
+                        <div class="mb-2">
+                            <div class="flex justify-between text-sm text-gray-600 mb-1">
+                                <span>Progress</span>
+                                <span id="progress-percent">0%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <div class="flex justify-between items-center mb-2">
+                                <span class="text-sm font-medium text-gray-700">Logs</span>
+                                <div class="space-x-2">
+                                    <button onclick="toggleLogsPause()" id="logs-pause-btn" class="text-xs text-gray-500 hover:text-gray-700 hidden">⏸ Pause</button>
+                                    <button onclick="scrollLogsToBottom()" id="logs-scroll-btn" class="text-xs text-blue-600 hover:text-blue-800 hidden">↓ New logs</button>
+                                    <button onclick="clearLogs()" class="text-xs text-gray-500 hover:text-gray-700">Clear</button>
+                                </div>
+                            </div>
+                            <div id="ingestion-logs" class="log-terminal p-4 rounded-lg h-64 overflow-y-auto" onscroll="handleLogsScroll()"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Query Tab -->
+            <div id="content-query" role="tabpanel" aria-labelledby="tab-query" class="hidden space-y-6">
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-semibold text-gray-900">Query Configuration</h2>
+                        <button onclick="clearChat()" aria-label="Clear chat history" class="text-sm text-gray-500 hover:text-gray-700">Clear chat</button>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div>
+                            <label for="model-select" class="block text-sm font-medium text-gray-700 mb-1">
+                                Model
+                                <span class="tooltip ml-1" tabindex="0">
+                                    <svg class="inline h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span class="tooltip-text">Choose which Ollama model to use for generating answers. Different models have different capabilities and speeds.</span>
+                                </span>
+                            </label>
+                            <select id="model-select" aria-label="Select LLM model for queries" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                                <option value="">Default</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="top-k-input" class="block text-sm font-medium text-gray-700 mb-1">
+                                Top-K Results
+                                <span class="tooltip ml-1" tabindex="0">
+                                    <svg class="inline h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span class="tooltip-text">Number of document chunks to retrieve (1-20). Higher values provide more context but may slow down responses and include less relevant information.</span>
+                                </span>
+                            </label>
+                            <input type="number" id="top-k-input" name="top-k" aria-label="Number of document chunks to retrieve" value="5" min="1" max="20" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                        </div>
+                        <div>
+                            <label for="temperature-input" class="block text-sm font-medium text-gray-700 mb-1">
+                                Temperature
+                                <span class="tooltip ml-1" tabindex="0">
+                                    <svg class="inline h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span class="tooltip-text">Controls creativity of AI responses (0-2). Lower values (0-0.5) = more focused and deterministic. Higher values (1-2) = more creative and varied. Default: 0.7</span>
+                                </span>
+                            </label>
+                            <input type="number" id="temperature-input" name="temperature" aria-label="Model creativity setting" value="0.7" min="0" max="2" step="0.1" class="w-full border-gray-300 rounded-md shadow-sm text-sm">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white shadow rounded-lg p-6">
+                    <div id="chat-messages" role="log" aria-live="polite" aria-label="Chat messages" class="space-y-4 mb-4 h-96 overflow-y-auto max-w-4xl mx-auto"></div>
+
+                    <div class="flex space-x-2 max-w-4xl mx-auto">
+                        <textarea id="query-input" rows="3" aria-label="Enter your question here" placeholder="Ask a question about the documents... (Shift+Enter for new line, Enter to send)" class="flex-1 border-gray-300 rounded-md shadow-sm resize-none p-3" onkeydown="handleQueryKeydown(event)"></textarea>
+                        <button onclick="submitQuery()" id="query-button" aria-label="Send query" class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400">
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Tab -->
+            <div id="content-metrics" role="tabpanel" aria-labelledby="tab-metrics" class="hidden space-y-6">
+                <div class="bg-white shadow rounded-lg p-4">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
+                        <h2 class="text-lg font-semibold text-gray-900">System Metrics</h2>
+                        <div class="flex items-center space-x-2">
+                            <span class="text-sm text-gray-600">View:</span>
+                            <select id="metrics-time-range" onchange="handleMetricsTimeRangeChange()" class="text-sm border-gray-300 rounded-md">
+                                <option value="all">All time (cumulative)</option>
+                            </select>
+                            <span class="tooltip ml-1" tabindex="0">
+                                <svg class="inline h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <span class="tooltip-text">Metrics show cumulative statistics since system deployment. Time-range filtering is a planned future enhancement.</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="bg-white shadow rounded-lg p-6">
+                        <div class="text-sm font-medium text-gray-500">Total Chunks</div>
+                        <div id="metric-chunks" aria-label="Total chunks in database" class="text-3xl font-bold text-gray-900 mt-2">-</div>
+                    </div>
+                    <div class="bg-white shadow rounded-lg p-6">
+                        <div class="text-sm font-medium text-gray-500">Cache Hit Rate</div>
+                        <div id="metric-cache" aria-label="Cache hit rate percentage" class="text-3xl font-bold text-gray-900 mt-2">-</div>
+                    </div>
+                    <div class="bg-white shadow rounded-lg p-6">
+                        <div class="text-sm font-medium text-gray-500">Files Processed</div>
+                        <div id="metric-files" aria-label="Number of files processed" class="text-3xl font-bold text-gray-900 mt-2">-</div>
+                    </div>
+                    <div class="bg-white shadow rounded-lg p-6">
+                        <div class="text-sm font-medium text-gray-500">Failed Files</div>
+                        <div id="metric-failed" aria-label="Number of failed files" class="text-3xl font-bold text-gray-900 mt-2">-</div>
+                    </div>
+                </div>
+
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">Cache Performance</h2>
+                    <canvas id="cache-chart" role="img" aria-label="Cache performance visualization chart" height="100"></canvas>
+                </div>
+
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">Database Info</h2>
+                    <div id="database-info" role="region" aria-label="Database information" class="text-sm text-gray-600"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Global state
+        let ws = null;
+        let currentTab = 'ingest';
+        let queryHistory = [];
+        let uploadedFilesCount = 0;
+        let databaseChunks = 0;
+        let queryStartTime = null;
+        let logsAutoscroll = true;
+        let logsManualScroll = false;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkHealth();
+            loadAvailableModels();
+            updateQueryInputState();
+            checkAutoIngestionStatus();
+            setInterval(checkHealth, 30000); // Check every 30s
+            setInterval(checkAutoIngestionStatus, 3000); // Check auto-ingestion every 3s
+
+            // Add config change listeners
+            const modelSelect = document.getElementById('model-select');
+            const topKInput = document.getElementById('top-k-input');
+            const tempInput = document.getElementById('temperature-input');
+
+            [modelSelect, topKInput, tempInput].forEach(el => {
+                el.addEventListener('change', showConfigUpdateNotification);
+            });
+
+            // Add keyboard navigation for tabs
+            document.addEventListener('keydown', handleGlobalKeydown);
+        });
+
+        // Global keyboard shortcuts
+        function handleGlobalKeydown(event) {
+            // Alt+1, Alt+2, Alt+3 for tab switching
+            if (event.altKey && event.key >= '1' && event.key <= '3') {
+                event.preventDefault();
+                const tabs = ['ingest', 'query', 'metrics'];
+                switchTab(tabs[parseInt(event.key) - 1]);
+            }
+
+            // Arrow keys when a tab button is focused
+            if (event.target.id && event.target.id.startsWith('tab-')) {
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    const tabs = ['ingest', 'query', 'metrics'];
+                    const currentIndex = tabs.indexOf(currentTab);
+                    let newIndex;
+
+                    if (event.key === 'ArrowLeft') {
+                        newIndex = currentIndex > 0 ? currentIndex - 1 : tabs.length - 1;
+                    } else {
+                        newIndex = currentIndex < tabs.length - 1 ? currentIndex + 1 : 0;
+                    }
+
+                    switchTab(tabs[newIndex]);
+                    document.getElementById(`tab-${tabs[newIndex]}`).focus();
+                }
+            }
+        }
+
+        // Tab switching
+        function switchTab(tab) {
+            currentTab = tab;
+
+            // Update tab buttons and ARIA attributes
+            ['ingest', 'query', 'metrics'].forEach(t => {
+                const btn = document.getElementById(`tab-${t}`);
+                const content = document.getElementById(`content-${t}`);
+
+                if (t === tab) {
+                    btn.classList.add('tab-active');
+                    btn.classList.remove('text-gray-500');
+                    btn.setAttribute('aria-selected', 'true');
+                    content.classList.remove('hidden');
+                } else {
+                    btn.classList.remove('tab-active');
+                    btn.classList.add('text-gray-500');
+                    btn.setAttribute('aria-selected', 'false');
+                    content.classList.add('hidden');
+                }
+            });
+
+            // Load tab-specific data
+            if (tab === 'metrics') {
+                loadMetrics();
+            } else if (tab === 'query') {
+                updateQueryInputState();
+            }
+        }
+
+        // Auto-ingestion status check
+        async function checkAutoIngestionStatus() {
+            try {
+                const response = await fetch('/api/auto-ingest/status');
+                const data = await response.json();
+
+                const banner = document.getElementById('auto-ingest-banner');
+                const icon = document.getElementById('auto-ingest-icon');
+                const message = document.getElementById('auto-ingest-message');
+                const detail = document.getElementById('auto-ingest-detail');
+                const dismissBtn = document.getElementById('auto-ingest-dismiss');
+
+                if (data.running) {
+                    // Show running status
+                    banner.classList.remove('hidden');
+                    banner.className = 'border-t border-blue-200 bg-blue-50';
+                    icon.className = 'spinner';
+                    message.textContent = data.message;
+                    detail.textContent = `Processing ${data.files_processed} of ${data.files_found} files...`;
+                    dismissBtn.classList.add('hidden');
+                } else if (data.complete && data.files_processed > 0) {
+                    // Show completion status (can be dismissed)
+                    banner.classList.remove('hidden');
+                    banner.className = 'border-t border-green-200 bg-green-50';
+                    icon.className = '';
+                    icon.innerHTML = '<svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+                    message.textContent = data.message;
+                    detail.textContent = '';
+                    dismissBtn.classList.remove('hidden');
+
+                    // Update health to refresh chunk count
+                    checkHealth();
+                } else if (data.complete && data.files_found === 0) {
+                    // Show info message about empty folder (can be dismissed)
+                    banner.classList.remove('hidden');
+                    banner.className = 'border-t border-gray-200 bg-gray-50';
+                    icon.className = '';
+                    icon.innerHTML = '<svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+                    message.textContent = data.message;
+                    detail.textContent = '';
+                    dismissBtn.classList.remove('hidden');
+                } else if (data.complete && data.message && data.message.includes('already ingested')) {
+                    // All files already processed - show briefly then auto-dismiss
+                    banner.classList.remove('hidden');
+                    banner.className = 'border-t border-blue-200 bg-blue-50';
+                    icon.className = '';
+                    icon.innerHTML = '<svg class="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+                    message.textContent = data.message;
+                    detail.textContent = '';
+                    dismissBtn.classList.remove('hidden');
+
+                    // Auto-dismiss after 5 seconds
+                    setTimeout(() => {
+                        banner.classList.add('hidden');
+                    }, 5000);
+                }
+            } catch (error) {
+                console.error('Failed to check auto-ingestion status:', error);
+            }
+        }
+
+        function dismissAutoIngestBanner() {
+            const banner = document.getElementById('auto-ingest-banner');
+            banner.classList.add('hidden');
+        }
+
+        // Health check
+        async function checkHealth() {
+            try {
+                const response = await fetch('/api/metrics/health');
+                const data = await response.json();
+
+                const indicator = document.getElementById('status-indicator');
+                if (data.success && data.status === 'healthy') {
+                    databaseChunks = data.database_chunks || 0;
+                    indicator.innerHTML = `
+                        <div class="h-3 w-3 rounded-full bg-green-500"></div>
+                        <span class="text-sm text-gray-600">${databaseChunks} chunks</span>
+                    `;
+                } else {
+                    databaseChunks = 0;
+                    indicator.innerHTML = `
+                        <div class="h-3 w-3 rounded-full bg-yellow-500"></div>
+                        <span class="text-sm text-gray-600">Degraded</span>
+                    `;
+                }
+                updateQueryInputState();
+            } catch (error) {
+                const indicator = document.getElementById('status-indicator');
+                databaseChunks = 0;
+                indicator.innerHTML = `
+                    <div class="h-3 w-3 rounded-full bg-red-500"></div>
+                    <span class="text-sm text-gray-600">Error</span>
+                `;
+                updateQueryInputState();
+            }
+        }
+
+        // Update query input state based on database
+        async function updateQueryInputState() {
+            const queryInput = document.getElementById('query-input');
+            const queryButton = document.getElementById('query-button');
+            const chatMessages = document.getElementById('chat-messages');
+
+            // Always enable query interface - don't block user
+            queryInput.disabled = false;
+            queryButton.disabled = false;
+
+            if (databaseChunks === 0) {
+                // Check if auto-ingestion is running
+                try {
+                    const response = await fetch('/api/auto-ingest/status');
+                    const autoIngestStatus = await response.json();
+
+                    if (autoIngestStatus.running) {
+                        queryInput.placeholder = "Auto-ingesting PDFs in background - you can query once complete";
+
+                        // Show informational message about ongoing ingestion
+                        if (queryHistory.length === 0 && chatMessages.children.length === 0) {
+                            chatMessages.innerHTML = `
+                                <div class="empty-state text-center text-gray-500 py-12">
+                                    <div class="spinner mx-auto mb-4"></div>
+                                    <h3 class="mt-4 text-sm font-medium text-gray-900">Auto-ingestion in progress</h3>
+                                    <p class="mt-2 text-sm text-gray-500">Processing PDFs from the <strong>pdfs/</strong> folder. Check the banner above for progress.</p>
+                                    <p class="mt-2 text-xs text-gray-400">You can query now, but results will be empty until ingestion completes.</p>
+                                </div>
+                            `;
+                        }
+                    } else {
+                        queryInput.placeholder = "Database empty - add PDFs to pdfs/ folder and restart, or use Ingest tab";
+
+                        // Show informational message
+                        if (queryHistory.length === 0 && chatMessages.children.length === 0) {
+                            chatMessages.innerHTML = `
+                                <div class="empty-state text-center text-gray-500 py-12">
+                                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                                    </svg>
+                                    <h3 class="mt-4 text-sm font-medium text-gray-900">Database is empty</h3>
+                                    <p class="mt-2 text-sm text-gray-500">Add PDFs to the <strong>pdfs/</strong> folder and restart the server for auto-ingestion,<br>or use the <strong>Ingest</strong> tab to manually upload files.</p>
+                                    <p class="mt-2 text-xs text-gray-400">Queries will return empty results until documents are ingested.</p>
+                                </div>
+                            `;
+                        }
+                    }
+                } catch (e) {
+                    // Fallback if status check fails
+                    queryInput.placeholder = "Database empty - add PDFs to pdfs/ folder and restart, or use Ingest tab";
+                }
+            } else {
+                queryInput.placeholder = "Ask a question about the documents... (Shift+Enter for new line, Enter to send)";
+
+                // Show empty state if no queries
+                if (queryHistory.length === 0 && chatMessages.children.length === 0) {
+                    chatMessages.innerHTML = `
+                        <div class="empty-state text-center text-gray-500 py-12">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <h3 class="mt-4 text-sm font-medium text-gray-900">No queries yet</h3>
+                            <p class="mt-2 text-sm text-gray-500">Ask a question about your medical documents to get started</p>
+                            <p class="mt-1 text-xs text-gray-400">${databaseChunks} chunks available from your documents</p>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // File upload
+        async function uploadFiles(files) {
+            if (files.length === 0) return;
+
+            const statusDiv = document.getElementById('upload-status');
+            statusDiv.classList.remove('hidden');
+
+            // Calculate total size
+            const totalSize = Array.from(files).reduce((sum, file) => sum + file.size, 0);
+            const totalSizeMB = (totalSize / (1024 * 1024)).toFixed(2);
+
+            statusDiv.innerHTML = `
+                <div class="space-y-2">
+                    <div class="flex items-center space-x-2">
+                        <div class="spinner"></div>
+                        <span>Uploading ${files.length} file(s) (${totalSizeMB} MB)...</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="upload-progress-bar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                    </div>
+                    <div class="text-xs text-gray-500" id="upload-progress-text">Preparing upload...</div>
+                </div>
+            `;
+
+            const formData = new FormData();
+            for (let file of files) {
+                formData.append('files', file);
+            }
+
+            try {
+                // Use XMLHttpRequest for progress tracking
+                const xhr = new XMLHttpRequest();
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const percentComplete = (e.loaded / e.total) * 100;
+                        const progressBar = document.getElementById('upload-progress-bar');
+                        const progressText = document.getElementById('upload-progress-text');
+                        if (progressBar) {
+                            progressBar.style.width = `${percentComplete}%`;
+                        }
+                        if (progressText) {
+                            progressText.textContent = `Uploading: ${percentComplete.toFixed(0)}% (${(e.loaded / (1024 * 1024)).toFixed(2)} MB / ${(e.total / (1024 * 1024)).toFixed(2)} MB)`;
+                        }
+                    }
+                });
+
+                const uploadPromise = new Promise((resolve, reject) => {
+                    xhr.onload = () => {
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            resolve(JSON.parse(xhr.responseText));
+                        } else {
+                            reject(new Error(`Upload failed: ${xhr.statusText}`));
+                        }
+                    };
+                    xhr.onerror = () => reject(new Error('Upload failed'));
+                });
+
+                xhr.open('POST', '/api/ingest/upload');
+                xhr.send(formData);
+
+                const data = await uploadPromise;
+
+                if (data.success) {
+                    uploadedFilesCount = data.total;
+                    // Show prominent success banner
+                    statusDiv.innerHTML = `
+                        <div class="bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                            <div class="flex items-start">
+                                <svg class="h-6 w-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <div>
+                                    <h3 class="text-sm font-medium text-green-800">Upload successful</h3>
+                                    <p class="text-sm text-green-700 mt-1">Successfully uploaded ${data.total} file(s) (${totalSizeMB} MB)</p>
+                                    ${data.failed.length > 0 ? `<p class="text-sm text-red-600 mt-1">Failed: ${data.failed.map(f => f.file).join(', ')}</p>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    updateIngestButtonState();
+
+                    // Auto-fade after 5 seconds
+                    setTimeout(() => {
+                        statusDiv.style.transition = 'opacity 1s';
+                        statusDiv.style.opacity = '0';
+                        setTimeout(() => {
+                            statusDiv.classList.add('hidden');
+                            statusDiv.style.opacity = '1';
+                        }, 1000);
+                    }, 5000);
+                } else {
+                    uploadedFilesCount = 0;
+                    statusDiv.innerHTML = `<div class="text-red-600">✗ Upload failed: ${data.error}</div>`;
+                    updateIngestButtonState();
+                }
+            } catch (error) {
+                uploadedFilesCount = 0;
+                statusDiv.innerHTML = `<div class="text-red-600">✗ Error: ${error.message}</div>`;
+                updateIngestButtonState();
+            }
+        }
+
+        // Update ingest button state
+        function updateIngestButtonState() {
+            const button = document.getElementById('ingest-button');
+            if (uploadedFilesCount > 0) {
+                button.disabled = false;
+                button.textContent = `Start Ingestion (${uploadedFilesCount} file${uploadedFilesCount > 1 ? 's' : ''} ready)`;
+            } else {
+                button.disabled = true;
+                button.textContent = 'Start Ingestion (upload files first)';
+            }
+        }
+
+        // Ingestion
+        function startIngestion() {
+            const reset = document.getElementById('reset-db').checked;
+            const progressDiv = document.getElementById('ingestion-progress');
+            const button = document.getElementById('ingest-button');
+            const logsDiv = document.getElementById('ingestion-logs');
+
+            // Remove any existing error banners
+            const existingError = document.getElementById('websocket-error-banner');
+            if (existingError) {
+                existingError.remove();
+            }
+
+            progressDiv.classList.remove('hidden');
+            button.disabled = true;
+            logsDiv.innerHTML = '';
+
+            // Connect WebSocket
+            ws = new WebSocket(`ws://${window.location.host}/api/ingest/stream`);
+
+            ws.onopen = () => {
+                addLog('Connected to server');
+                ws.send(JSON.stringify({ reset }));
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'log') {
+                    addLog(data.message);
+                    if (data.progress !== undefined) {
+                        updateProgress(data.progress);
+                    }
+                } else if (data.type === 'status') {
+                    addLog(`[STATUS] ${data.message}`);
+                    if (data.progress !== undefined) {
+                        updateProgress(data.progress);
+                    }
+                } else if (data.type === 'complete') {
+                    addLog(`[COMPLETE] ${data.message}`, 'text-green-400');
+                    updateProgress(100);
+                    uploadedFilesCount = 0;
+                    updateIngestButtonState();
+                    checkHealth();
+                    showIngestionSuccess(data.message);
+                } else if (data.type === 'error') {
+                    addLog(`[ERROR] ${data.message}`, 'text-red-400');
+                    updateIngestButtonState();
+                }
+            };
+
+            ws.onerror = (error) => {
+                addLog(`[ERROR] WebSocket connection error`, 'text-red-400');
+                showWebSocketError();
+                updateIngestButtonState();
+            };
+
+            ws.onclose = (event) => {
+                addLog('Connection closed');
+                if (event.code !== 1000) {
+                    // Abnormal closure
+                    showWebSocketError();
+                }
+                updateIngestButtonState();
+            };
+        }
+
+        function showWebSocketError() {
+            const progressDiv = document.getElementById('ingestion-progress');
+            const existingError = document.getElementById('websocket-error-banner');
+
+            if (!existingError) {
+                const errorBanner = document.createElement('div');
+                errorBanner.id = 'websocket-error-banner';
+                errorBanner.className = 'mt-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative';
+                errorBanner.innerHTML = `
+                    <div class="flex items-start">
+                        <svg class="h-5 w-5 text-red-500 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div>
+                            <strong class="font-bold">Connection Lost</strong>
+                            <p class="text-sm mt-1">WebSocket connection failed. Ingestion may be incomplete.</p>
+                            <p class="text-sm mt-1">Please refresh the page and try again. Check that the server is still running.</p>
+                        </div>
+                    </div>
+                `;
+                progressDiv.appendChild(errorBanner);
+            }
+        }
+
+        function showIngestionSuccess(message) {
+            const progressDiv = document.getElementById('ingestion-progress');
+            const existingSuccess = document.getElementById('ingestion-success-banner');
+
+            if (!existingSuccess) {
+                const successBanner = document.createElement('div');
+                successBanner.id = 'ingestion-success-banner';
+                successBanner.className = 'mt-4 bg-green-50 border-l-4 border-green-500 p-4 rounded';
+                successBanner.innerHTML = `
+                    <div class="flex items-start">
+                        <svg class="h-6 w-6 text-green-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <div>
+                            <h3 class="text-sm font-medium text-green-800">Ingestion Complete</h3>
+                            <p class="text-sm text-green-700 mt-1">${message}</p>
+                            <p class="text-xs text-green-600 mt-2">You can now go to the Query tab to ask questions.</p>
+                        </div>
+                    </div>
+                `;
+                progressDiv.appendChild(successBanner);
+
+                // Auto-fade after 8 seconds
+                setTimeout(() => {
+                    successBanner.style.transition = 'opacity 1s';
+                    successBanner.style.opacity = '0';
+                    setTimeout(() => {
+                        successBanner.remove();
+                    }, 1000);
+                }, 8000);
+            }
+        }
+
+        function addLog(message, className = 'text-gray-300') {
+            const logsDiv = document.getElementById('ingestion-logs');
+            const log = document.createElement('div');
+            log.className = className;
+            log.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(log);
+
+            // Auto-scroll if enabled and not manually scrolled
+            if (logsAutoscroll && !logsManualScroll) {
+                logsDiv.scrollTop = logsDiv.scrollHeight;
+            } else if (logsManualScroll) {
+                // Show "New logs" button
+                document.getElementById('logs-scroll-btn').classList.remove('hidden');
+            }
+
+            // Show pause button when logs are active
+            document.getElementById('logs-pause-btn').classList.remove('hidden');
+        }
+
+        function handleLogsScroll() {
+            const logsDiv = document.getElementById('ingestion-logs');
+            const scrollBtn = document.getElementById('logs-scroll-btn');
+
+            // Check if user scrolled away from bottom
+            const isAtBottom = logsDiv.scrollHeight - logsDiv.scrollTop <= logsDiv.clientHeight + 50;
+
+            if (!isAtBottom && logsAutoscroll) {
+                logsManualScroll = true;
+                scrollBtn.classList.remove('hidden');
+            } else if (isAtBottom) {
+                logsManualScroll = false;
+                scrollBtn.classList.add('hidden');
+            }
+        }
+
+        function scrollLogsToBottom() {
+            const logsDiv = document.getElementById('ingestion-logs');
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+            logsManualScroll = false;
+            document.getElementById('logs-scroll-btn').classList.add('hidden');
+        }
+
+        function toggleLogsPause() {
+            logsAutoscroll = !logsAutoscroll;
+            const pauseBtn = document.getElementById('logs-pause-btn');
+
+            if (logsAutoscroll) {
+                pauseBtn.textContent = '⏸ Pause';
+                logsManualScroll = false;
+            } else {
+                pauseBtn.textContent = '▶ Resume';
+            }
+        }
+
+        function updateProgress(percent) {
+            const bar = document.getElementById('progress-bar');
+            const text = document.getElementById('progress-percent');
+            bar.style.width = `${percent}%`;
+            text.textContent = `${percent}%`;
+        }
+
+        function clearLogs() {
+            document.getElementById('ingestion-logs').innerHTML = '';
+            logsAutoscroll = true;
+            logsManualScroll = false;
+            document.getElementById('logs-scroll-btn').classList.add('hidden');
+            document.getElementById('logs-pause-btn').classList.add('hidden');
+        }
+
+        // Configuration change notification
+        function showConfigUpdateNotification() {
+            const modelSelect = document.getElementById('model-select');
+            const topKInput = document.getElementById('top-k-input');
+            const tempInput = document.getElementById('temperature-input');
+
+            // Remove existing notification
+            const existing = document.getElementById('config-update-notification');
+            if (existing) {
+                existing.remove();
+            }
+
+            // Create notification
+            const notification = document.createElement('div');
+            notification.id = 'config-update-notification';
+            notification.className = 'mt-2 text-sm text-blue-600 flex items-center space-x-2';
+            notification.innerHTML = `
+                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <span>Settings updated - will apply to next query</span>
+            `;
+
+            // Insert after the config grid
+            const configSection = document.querySelector('#content-query .grid');
+            configSection.parentElement.insertBefore(notification, configSection.nextSibling);
+
+            // Fade out after 3 seconds
+            setTimeout(() => {
+                notification.style.transition = 'opacity 0.5s';
+                notification.style.opacity = '0';
+                setTimeout(() => notification.remove(), 500);
+            }, 3000);
+        }
+
+        // Handle textarea keydown for query input
+        function handleQueryKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                submitQuery();
+            }
+        }
+
+        // Query
+        async function loadAvailableModels() {
+            try {
+                const response = await fetch('/api/query/models');
+                const data = await response.json();
+
+                const select = document.getElementById('model-select');
+                select.innerHTML = '<option value="">Default</option>';
+
+                if (data.success && data.models) {
+                    data.models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model;
+                        option.textContent = model;
+                        if (model === data.default) {
+                            option.textContent += ' (default)';
+                        }
+                        select.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load models:', error);
+            }
+        }
+
+        async function submitQuery() {
+            const input = document.getElementById('query-input');
+            const button = document.getElementById('query-button');
+            const question = input.value.trim();
+
+            if (!question) return;
+
+            // Disable input
+            input.disabled = true;
+            button.disabled = true;
+
+            // Add user message
+            addMessage('user', question);
+            input.value = '';
+
+            // Show loading with elapsed time
+            queryStartTime = Date.now();
+            const loadingId = addMessage('assistant', '<div class="flex items-center space-x-3"><div class="spinner"></div><div><div class="font-medium">Thinking...</div><div class="text-xs text-gray-500 mt-1" id="query-elapsed">0s elapsed</div></div></div>');
+
+            // Update elapsed time every second
+            const elapsedInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - queryStartTime) / 1000);
+                const elapsedEl = document.getElementById('query-elapsed');
+                if (elapsedEl) {
+                    elapsedEl.textContent = `${elapsed}s elapsed`;
+                } else {
+                    clearInterval(elapsedInterval);
+                }
+            }, 1000);
+
+            // Get parameters
+            const model = document.getElementById('model-select').value || null;
+            const topK = parseInt(document.getElementById('top-k-input').value);
+            const temperature = parseFloat(document.getElementById('temperature-input').value);
+
+            try {
+                const response = await fetch('/api/query/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        question,
+                        top_k: topK,
+                        model,
+                        temperature,
+                        return_context: false
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Query failed');
+                }
+
+                const data = await response.json();
+
+                // Remove loading, add response
+                clearInterval(elapsedInterval);
+                document.getElementById(loadingId).remove();
+                addMessage('assistant', formatResponse(data));
+
+                // Store in history
+                queryHistory.push(data);
+
+            } catch (error) {
+                clearInterval(elapsedInterval);
+                document.getElementById(loadingId).remove();
+                addMessage('assistant', `❌ Error: ${error.message}`);
+            } finally {
+                input.disabled = false;
+                button.disabled = false;
+                input.focus();
+            }
+        }
+
+        function addMessage(role, content) {
+            const messagesDiv = document.getElementById('chat-messages');
+            const messageId = `msg-${Date.now()}`;
+            const isUser = role === 'user';
+
+            const message = document.createElement('div');
+            message.id = messageId;
+            message.className = `chat-message flex ${isUser ? 'justify-end' : 'justify-start'}`;
+            message.innerHTML = `
+                <div class="max-w-3xl ${isUser ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-900'} rounded-lg p-4">
+                    ${content}
+                </div>
+            `;
+            messagesDiv.appendChild(message);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            return messageId;
+        }
+
+        function formatResponse(data) {
+            const answer = marked.parse(data.answer);
+            const responseId = `response-${Date.now()}`;
+            let sources = `<div class="mt-4 text-sm border-t border-gray-200 pt-2">
+                <strong>Sources:</strong>
+                <ul class="mt-2 space-y-2">`;
+
+            data.sources.forEach((source, i) => {
+                const pages = source.pages && source.pages.length > 0 ? source.pages.join(', ') : 'Unknown';
+                const sourceId = `${responseId}-source-${i}`;
+                const contextPreview = source.context ? source.context.substring(0, 150) + '...' : 'No context available';
+
+                sources += `<li class="text-xs border-l-2 border-gray-300 pl-2">
+                    <div class="flex items-start justify-between">
+                        <div class="flex-1">
+                            <span class="font-medium">${i + 1}. ${source.file}</span>
+                            <span class="text-gray-600">(${source.title || 'Unknown'}, p.${pages}, similarity: ${(source.similarity * 100).toFixed(1)}%)</span>
+                        </div>
+                        <button onclick="toggleSourceContext('${sourceId}')" class="ml-2 text-blue-600 hover:text-blue-800 text-xs underline">
+                            Show context
+                        </button>
+                    </div>
+                    <div id="${sourceId}" class="hidden mt-2 p-2 bg-gray-50 rounded text-xs text-gray-700 border border-gray-200">
+                        <strong>Context:</strong>
+                        <p class="mt-1">${contextPreview}</p>
+                    </div>
+                </li>`;
+            });
+
+            sources += `</ul><div class="mt-2 text-xs text-gray-500">Query time: ${data.query_time.toFixed(2)}s | Model: ${data.model_used}</div></div>`;
+
+            return answer + sources;
+        }
+
+        function toggleSourceContext(sourceId) {
+            const contextDiv = document.getElementById(sourceId);
+            const button = contextDiv.previousElementSibling.querySelector('button');
+
+            if (contextDiv.classList.contains('hidden')) {
+                contextDiv.classList.remove('hidden');
+                button.textContent = 'Hide context';
+            } else {
+                contextDiv.classList.add('hidden');
+                button.textContent = 'Show context';
+            }
+        }
+
+        function clearChat() {
+            document.getElementById('chat-messages').innerHTML = '';
+            queryHistory = [];
+        }
+
+        // Metrics
+        let cacheChart = null;
+        let metricsTimeRange = 'all';
+
+        function handleMetricsTimeRangeChange() {
+            metricsTimeRange = document.getElementById('metrics-time-range').value;
+            loadMetrics();
+        }
+
+        async function loadMetrics() {
+            try {
+                const response = await fetch('/api/metrics/stats');
+                const data = await response.json();
+
+                if (!data.success) {
+                    console.error('Failed to load metrics');
+                    return;
+                }
+
+                // Update cards
+                document.getElementById('metric-chunks').textContent = data.database.total_chunks.toLocaleString();
+                document.getElementById('metric-cache').textContent = data.cache.hit_rate_percent.toFixed(1) + '%';
+                document.getElementById('metric-files').textContent = data.ingestion.total_processed;
+                document.getElementById('metric-failed').textContent = data.ingestion.total_failed;
+
+                // Update chart
+                updateCacheChart(data.cache);
+
+                // Database info
+                const dbInfo = document.getElementById('database-info');
+                dbInfo.innerHTML = `
+                    <p><strong>Collection:</strong> ${data.database.collection_name}</p>
+                    <p><strong>Path:</strong> ${data.database.db_path}</p>
+                    <p class="mt-2"><strong>Sample Files:</strong></p>
+                    <ul class="list-disc list-inside ml-4">
+                        ${data.database.sample_files.map(f => `<li>${f}</li>`).join('')}
+                    </ul>
+                `;
+
+                if (data.ingestion.failed_files.length > 0) {
+                    dbInfo.innerHTML += `
+                        <p class="mt-2 text-red-600"><strong>Failed Files:</strong></p>
+                        <ul class="list-disc list-inside ml-4 text-red-600">
+                            ${data.ingestion.failed_files.map(f => `<li>${f}</li>`).join('')}
+                        </ul>
+                    `;
+                }
+
+            } catch (error) {
+                console.error('Error loading metrics:', error);
+            }
+        }
+
+        function updateCacheChart(cacheData) {
+            const ctx = document.getElementById('cache-chart').getContext('2d');
+
+            if (cacheChart) {
+                cacheChart.destroy();
+            }
+
+            cacheChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Cache Hits', 'Cache Misses'],
+                    datasets: [{
+                        data: [cacheData.hits, cacheData.misses],
+                        backgroundColor: ['#10b981', '#ef4444'],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                        },
+                        title: {
+                            display: true,
+                            text: `Total Requests: ${cacheData.total_requests} | Hit Rate: ${cacheData.hit_rate_percent.toFixed(1)}%`
+                        }
+                    }
+                }
+            });
+        }
+
+        // Auto-refresh metrics
+        setInterval(() => {
+            if (currentTab === 'metrics') {
+                loadMetrics();
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

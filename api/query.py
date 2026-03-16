@@ -4,18 +4,29 @@ Query API endpoints for RAG queries.
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from src.config import settings
 from src.logging_config import get_logger
 from src.metrics import get_metrics
 from src.rag_pipeline import MedicalRAG
-from src.validation import ValidationError, validate_query
+from src.validation import (
+    ValidationError,
+    validate_model_name,
+    validate_query,
+    validate_temperature,
+    validate_top_k,
+)
 from src.vector_db import VectorDatabase
 
 router = APIRouter()
 logger = get_logger()
+
+# Initialize limiter for this router
+limiter = Limiter(key_func=get_remote_address)
 
 # Global RAG instance (lazy loaded)
 _rag_instance: MedicalRAG | None = None
@@ -65,12 +76,13 @@ class QueryResponse(BaseModel):
 
 
 @router.post("/query", response_model=QueryResponse)
-async def query_rag(request: QueryRequest) -> QueryResponse:
+@limiter.limit(f"{settings.rate_limit_per_minute}/minute")
+async def query_rag(request: Request, query_request: QueryRequest) -> QueryResponse:
     """
     Submit a query to the RAG system.
 
     Args:
-        request: Query request with question and parameters
+        query_request: Query request with question and parameters
 
     Returns:
         Query response with answer and sources
@@ -78,24 +90,25 @@ async def query_rag(request: QueryRequest) -> QueryResponse:
     metrics = get_metrics()
 
     try:
-        # Validate query
-        question = validate_query(request.question)
+        # Validate all inputs
+        question = validate_query(query_request.question)
+        top_k = validate_top_k(query_request.top_k, max_value=settings.top_k_results * 2)
 
         # Get RAG instance
         rag = get_rag()
 
-        # Override model/temperature if specified
-        if request.model:
-            rag.model = request.model
-        if request.temperature is not None:
-            rag.temperature = request.temperature
+        # Override model/temperature if specified (with validation)
+        if query_request.model:
+            rag.model = validate_model_name(query_request.model)
+        if query_request.temperature is not None:
+            rag.temperature = validate_temperature(query_request.temperature)
 
         # Execute query
         metrics.start_timer("api_query")
         response = rag.query(
             question=question,
-            top_k=request.top_k,
-            return_context=request.return_context
+            top_k=top_k,
+            return_context=query_request.return_context
         )
         query_time = metrics.stop_timer("api_query")
 
@@ -129,7 +142,7 @@ async def get_available_models() -> dict[str, Any]:
     """
     try:
         import requests
-        response = requests.get(f"{settings.ollama_base_url}/api/tags", timeout=5)
+        response = requests.get(f"{settings.ollama_base_url}/api/tags", timeout=settings.api_request_timeout)
         response.raise_for_status()
         models = response.json().get("models", [])
 

@@ -23,6 +23,7 @@ tenacity>=8.2.0
 # Web UI
 fastapi[all]>=0.104.0
 python-multipart>=0.0.6
+slowapi>=0.1.9
 
 # Development Tools
 black>=23.0.0

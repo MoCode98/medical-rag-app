@@ -161,7 +161,7 @@ async def health_check() -> dict[str, Any]:
         ollama_healthy = False
         try:
             import requests
-            response = requests.get(f"{settings.ollama_base_url}/api/tags", timeout=5)
+            response = requests.get(f"{settings.ollama_base_url}/api/tags", timeout=settings.api_request_timeout)
             ollama_healthy = response.status_code == 200
         except Exception:
             pass

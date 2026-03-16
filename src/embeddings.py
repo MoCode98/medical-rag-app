@@ -26,8 +26,8 @@ class OllamaEmbeddings:
 
     def __init__(
         self,
-        model: str = None,
-        base_url: str = None,
+        model: str | None = None,
+        base_url: str | None = None,
         timeout: float = 120.0,
         use_cache: bool = True,
     ):
@@ -43,6 +43,9 @@ class OllamaEmbeddings:
         self.model = model or settings.ollama_embedding_model
         self.base_url = base_url or settings.ollama_base_url
         self.timeout = timeout
+
+        # Initialize Ollama client with correct host
+        self.ollama_client = ollama.Client(host=self.base_url)
 
         # Initialize cache
         self.use_cache = use_cache
@@ -90,11 +93,12 @@ class OllamaEmbeddings:
                     f"Embedding model '{self.model}' not found locally. "
                     f"Pulling from Ollama registry... (this may take several minutes)"
                 )
-                # Pull the model
+                # Pull the model using ollama client with correct host
                 # Note: ollama.pull() doesn't support timeout parameter
                 # Model downloads can take 5-15 minutes depending on size and connection
                 try:
-                    ollama.pull(self.model)
+                    # Use the ollama client initialized with correct base URL
+                    self.ollama_client.pull(self.model)
                     logger.info(f"Successfully pulled model '{self.model}'")
                 except Exception as e:
                     logger.error(f"Failed to pull model '{self.model}': {e}")
@@ -133,7 +137,7 @@ class OllamaEmbeddings:
 
         # Generate embedding with automatic retries
         try:
-            response = ollama.embeddings(model=self.model, prompt=text)
+            response = self.ollama_client.embeddings(model=self.model, prompt=text)
             embedding = response.get("embedding")
 
             if not embedding:
@@ -181,7 +185,7 @@ class OllamaEmbeddings:
                 raise
 
     async def embed_texts_async_batch(
-        self, texts: list[str], batch_size: int = 10
+        self, texts: list[str], batch_size: int | None = None
     ) -> list[list[float]]:
         """
         Generate embeddings in parallel batches asynchronously.
@@ -193,6 +197,9 @@ class OllamaEmbeddings:
         Returns:
             List of embedding vectors
         """
+        if batch_size is None:
+            batch_size = settings.embedding_batch_size
+
         all_embeddings = []
 
         for i in range(0, len(texts), batch_size):
@@ -269,7 +276,7 @@ class OllamaEmbeddings:
 
             try:
                 new_embeddings = asyncio.run(
-                    self.embed_texts_async_batch(texts_to_generate, batch_size=10)
+                    self.embed_texts_async_batch(texts_to_generate)
                 )
 
                 # Place generated embeddings in correct positions

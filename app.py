@@ -16,10 +16,13 @@ import sys
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -41,12 +44,23 @@ auto_ingestion_status = {
 setup_logging(log_level="INFO", log_file=Path(settings.log_file), log_to_console=True)
 logger = get_logger()
 
+# Initialize rate limiter
+limiter = Limiter(
+    key_func=get_remote_address,
+    enabled=settings.rate_limit_enabled,
+    default_limits=[f"{settings.rate_limit_per_minute}/minute"]
+)
+
 # Create FastAPI app
 app = FastAPI(
     title="Medical Research RAG",
     description="Retrieval-Augmented Generation system for medical research documents",
     version="1.0.0",
 )
+
+# Add rate limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS middleware for development
 app.add_middleware(

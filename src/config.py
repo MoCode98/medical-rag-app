@@ -81,6 +81,23 @@ class Settings(BaseSettings):
         default=30.0, env="LLM_TIMEOUT_CLASSIFICATION", ge=5.0, le=120.0
     )
 
+    # API Configuration
+    max_upload_file_size_mb: int = Field(default=50, env="MAX_UPLOAD_FILE_SIZE_MB", ge=1, le=500)
+    allowed_file_extensions: list[str] = Field(
+        default=[".pdf"], env="ALLOWED_FILE_EXTENSIONS"
+    )
+    api_request_timeout: float = Field(default=5.0, env="API_REQUEST_TIMEOUT", ge=1.0, le=60.0)
+    max_query_length: int = Field(default=2000, env="MAX_QUERY_LENGTH", ge=100, le=10000)
+
+    # Batch Processing Configuration
+    embedding_batch_size: int = Field(default=10, env="EMBEDDING_BATCH_SIZE", ge=1, le=100)
+    vector_db_batch_size: int = Field(default=100, env="VECTOR_DB_BATCH_SIZE", ge=10, le=1000)
+
+    # Rate Limiting Configuration
+    rate_limit_enabled: bool = Field(default=True, env="RATE_LIMIT_ENABLED")
+    rate_limit_per_minute: int = Field(default=60, env="RATE_LIMIT_PER_MINUTE", ge=1, le=1000)
+    rate_limit_upload_per_hour: int = Field(default=20, env="RATE_LIMIT_UPLOAD_PER_HOUR", ge=1, le=100)
+
     @field_validator("chunk_overlap")
     @classmethod
     def validate_chunk_overlap(cls, v: int, info: ValidationInfo) -> int:

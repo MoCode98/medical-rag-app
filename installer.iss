@@ -67,10 +67,16 @@ Source: "START_APP.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "STOP_APP.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "DOWNLOAD_MODELS.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "CHECK_STATUS.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "DEBUG_INGESTION.bat"; DestDir: "{app}"; Flags: ignoreversion
+
+; Scripts folder (backup, restore, PDF metadata tools)
+Source: "scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Documentation
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion isreadme
 Source: "DOCKER_SETUP.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "BUILD_INSTALLER.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "WINDOWS_INGESTION_TROUBLESHOOTING.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "QUICK_START_DOCKER.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "QUICK_START_WEB_UI.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "WINDOWS_INSTALLER_README.txt"; DestDir: "{app}"; Flags: ignoreversion
@@ -80,6 +86,7 @@ Name: "{autoprograms}\{#MyAppName}\Start Medical RAG"; Filename: "{app}\START_AP
 Name: "{autoprograms}\{#MyAppName}\Stop Medical RAG"; Filename: "{app}\STOP_APP.bat"; WorkingDir: "{app}"
 Name: "{autoprograms}\{#MyAppName}\Check Status"; Filename: "{app}\CHECK_STATUS.bat"; WorkingDir: "{app}"
 Name: "{autoprograms}\{#MyAppName}\Download AI Models"; Filename: "{app}\DOWNLOAD_MODELS.bat"; WorkingDir: "{app}"
+Name: "{autoprograms}\{#MyAppName}\Debug Ingestion"; Filename: "{app}\DEBUG_INGESTION.bat"; WorkingDir: "{app}"
 Name: "{autoprograms}\{#MyAppName}\Open Web Interface"; Filename: "http://localhost:8000"
 Name: "{autoprograms}\{#MyAppName}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Medical Research RAG"; Filename: "{app}\START_APP.bat"; WorkingDir: "{app}"; Tasks: desktopicon

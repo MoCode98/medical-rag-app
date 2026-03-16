@@ -7,8 +7,10 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, File, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from src.chunker import IntelligentChunker
 from src.config import settings
@@ -17,17 +19,22 @@ from src.ingestion_progress import IngestionProgress
 from src.logging_config import get_logger
 from src.metrics import get_metrics
 from src.pdf_parser import PDFParser
+from src.validation import ValidationError, validate_filename
 from src.vector_db import VectorDatabase
 
 router = APIRouter()
 logger = get_logger()
+
+# Initialize limiter for this router
+limiter = Limiter(key_func=get_remote_address)
 
 # Global state for tracking ingestion
 ingestion_status = {"is_running": False, "progress": 0, "message": "", "files_processed": []}
 
 
 @router.post("/upload")
-async def upload_pdfs(files: list[UploadFile] = File(...)) -> dict[str, Any]:
+@limiter.limit(f"{settings.rate_limit_upload_per_hour}/hour")
+async def upload_pdfs(request: Request, files: list[UploadFile] = File(...)) -> dict[str, Any]:
     """
     Upload PDF files to the pdf folder.
 
@@ -45,24 +52,33 @@ async def upload_pdfs(files: list[UploadFile] = File(...)) -> dict[str, Any]:
         failed_files = []
 
         for file in files:
-            # Validate PDF
-            if not file.filename.lower().endswith(".pdf"):
-                failed_files.append({"file": file.filename, "error": "Not a PDF file"})
+            try:
+                # Validate filename for security
+                validated_filename = validate_filename(
+                    file.filename,
+                    allowed_extensions=settings.allowed_file_extensions
+                )
+            except ValidationError as e:
+                failed_files.append({"file": file.filename, "error": str(e)})
                 continue
 
-            # Check file size (max 50MB)
+            # Check file size
             content = await file.read()
-            if len(content) > 50 * 1024 * 1024:
-                failed_files.append({"file": file.filename, "error": "File size exceeds 50MB"})
+            max_size_bytes = settings.max_upload_file_size_mb * 1024 * 1024
+            if len(content) > max_size_bytes:
+                failed_files.append({
+                    "file": validated_filename,
+                    "error": f"File size exceeds {settings.max_upload_file_size_mb}MB"
+                })
                 continue
 
-            # Save file
-            file_path = pdf_dir / file.filename
+            # Save file with validated filename
+            file_path = pdf_dir / validated_filename
             with open(file_path, "wb") as f:
                 f.write(content)
 
-            uploaded_files.append(file.filename)
-            logger.info(f"Uploaded: {file.filename}")
+            uploaded_files.append(validated_filename)
+            logger.info(f"Uploaded: {validated_filename}")
 
         return {
             "success": True,

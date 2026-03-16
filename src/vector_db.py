@@ -71,7 +71,7 @@ class VectorDatabase:
             logger.error(f"Error creating collection: {e}")
             raise
 
-    def add_chunks(self, chunks: list[TextChunk], batch_size: int = 100) -> None:
+    def add_chunks(self, chunks: list[TextChunk], batch_size: int | None = None) -> None:
         """
         Add text chunks to the vector database.
 
@@ -79,6 +79,8 @@ class VectorDatabase:
             chunks: List of TextChunk objects
             batch_size: Number of chunks to process in each batch
         """
+        if batch_size is None:
+            batch_size = settings.vector_db_batch_size
         if not chunks:
             logger.warning("No chunks to add to database")
             return

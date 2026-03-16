@@ -20,7 +20,7 @@ if errorlevel 1 (
 )
 
 REM Check if containers are running
-docker compose ps | findstr "medical-rag-ollama" | findstr "Up" >nul 2>&1
+docker compose ps | findstr "ollama" | findstr "Up" >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Containers are not running!
     echo.

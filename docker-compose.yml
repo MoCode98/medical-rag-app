@@ -15,10 +15,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+    # Resource limits to prevent overconsumption
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '2.0'
+          memory: 4G
     # Optional: GPU support (requires nvidia-docker and NVIDIA GPU)
-    # Uncomment the following lines if you have an NVIDIA GPU:
-    # deploy:
-    #   resources:
+    # Uncomment the following lines to enable GPU:
     #     reservations:
     #       devices:
     #         - driver: nvidia
@@ -43,8 +50,8 @@ services:
       - vector_db:/app/vector_db
       # Named volume for caches and progress tracking (performance optimization)
       - data_cache:/app/data
-      # Bind mount for logs (optional - for debugging on host)
-      - ./logs:/app/logs
+      # Named volume for logs (fixes Windows permission issues)
+      - logs_data:/app/logs
     environment:
       # Ollama configuration
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -72,6 +79,15 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    # Resource limits to prevent overconsumption
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
 
 # Named volumes for persistent data
 volumes:
@@ -85,4 +101,8 @@ volumes:
 
   # Embedding cache and ingestion progress (improves performance)
   data_cache:
+    driver: local
+
+  # Application logs (fixes Windows permission issues with bind mounts)
+  logs_data:
     driver: local

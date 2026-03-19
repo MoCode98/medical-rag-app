@@ -106,8 +106,20 @@ async def health():
 # Auto-ingestion status endpoint
 @app.get("/api/auto-ingest/status")
 async def get_auto_ingest_status():
-    """Get status of background auto-ingestion."""
-    return auto_ingestion_status
+    """Get status of background auto-ingestion with detailed file information."""
+    # Get progress tracking information
+    from src.ingestion_progress import IngestionProgress
+    progress = IngestionProgress()
+    progress_status = progress.get_status()
+
+    # Combine with current auto-ingestion status
+    status = auto_ingestion_status.copy()
+    status["processed_files"] = progress_status.get("processed_files", [])
+    status["failed_files"] = progress_status.get("failed_files", [])
+    status["total_processed"] = progress_status.get("total_processed", 0)
+    status["total_failed"] = progress_status.get("total_failed", 0)
+
+    return status
 
 
 async def run_auto_ingestion():
@@ -180,9 +192,9 @@ async def run_auto_ingestion():
 
                 auto_ingestion_status["message"] = f"Processing {pdf_path.name} ({idx}/{len(new_files)})..."
 
-                # Parse PDF
+                # Parse PDF (pass Path object, not string)
                 document = await asyncio.get_event_loop().run_in_executor(
-                    None, pdf_parser.parse_pdf, str(pdf_path)
+                    None, pdf_parser.parse_pdf, pdf_path
                 )
 
                 # Chunk text
@@ -194,7 +206,7 @@ async def run_auto_ingestion():
                 )
 
                 # Mark as processed
-                progress.mark_file_processed(pdf_path.name, len(chunks))
+                progress.mark_processed(pdf_path.name)
 
                 auto_ingestion_status["files_processed"] = idx
 
@@ -202,7 +214,7 @@ async def run_auto_ingestion():
 
             except Exception as e:
                 logger.error(f"Auto-ingestion: Failed to process {pdf_path.name}: {e}")
-                progress.mark_file_failed(pdf_path.name, str(e))
+                progress.mark_failed(pdf_path.name, str(e))
 
         # Complete
         auto_ingestion_status.update({

@@ -46,9 +46,16 @@ OPTION 2: Use Start Menu
 
 The first time you run the application, you need to download AI models (~5GB).
 
-The START_APP.bat script will prompt you to download them automatically.
+RECOMMENDED: Complete setup automatically after installation
+  • Check "Complete setup now" option at the end of installation
+  • This will download models, build containers, start the app, and ingest sample PDFs
+  • Takes 15-40 minutes but everything will be ready when done!
+  • Browser opens automatically and you can watch the progress
 
-OR download manually from Start Menu:
+OR run setup manually from Start Menu:
+  • Medical Research RAG → Complete Setup (First Time)
+
+OR download models separately:
   • Medical Research RAG → Download AI Models
 
 This downloads:
@@ -87,11 +94,12 @@ The web interface has 3 tabs:
 
 All shortcuts are in: Start Menu → Medical Research RAG Pipeline
 
-• Start Medical RAG         - Starts the application
-• Stop Medical RAG          - Stops the application (preserves data)
-• Check Status              - Shows system status and health
-• Download AI Models        - Downloads required AI models
-• Open Web Interface        - Opens http://localhost:8000 in browser
+• Complete Setup (First Time) - One-time setup: builds containers & downloads models
+• Start Medical RAG           - Starts the application
+• Stop Medical RAG            - Stops the application (preserves data)
+• Check Status                - Shows system status and health
+• Download AI Models          - Downloads required AI models (if not done during setup)
+• Open Web Interface          - Opens http://localhost:8000 in browser
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ STOPPING THE APPLICATION                                                     │

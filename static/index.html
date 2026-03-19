@@ -157,6 +157,17 @@
         <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <!-- Ingest Tab -->
             <div id="content-ingest" role="tabpanel" aria-labelledby="tab-ingest" class="space-y-6">
+                <!-- File Status Section -->
+                <div class="bg-white shadow rounded-lg p-6">
+                    <h2 class="text-lg font-semibold text-gray-900 mb-4">PDF Ingestion Status</h2>
+                    <div id="file-status-container" class="space-y-3">
+                        <div class="flex items-center justify-center py-8 text-gray-500">
+                            <div class="spinner mr-3"></div>
+                            <span>Loading file status...</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="bg-white shadow rounded-lg p-6">
                     <h2 class="text-lg font-semibold text-gray-900 mb-4">Upload PDFs</h2>
                     <div class="space-y-4">
@@ -345,8 +356,10 @@
             loadAvailableModels();
             updateQueryInputState();
             checkAutoIngestionStatus();
+            updateFileStatus(); // Load file status on page load
             setInterval(checkHealth, 30000); // Check every 30s
             setInterval(checkAutoIngestionStatus, 3000); // Check auto-ingestion every 3s
+            setInterval(updateFileStatus, 5000); // Update file status every 5s
 
             // Add config change listeners
             const modelSelect = document.getElementById('model-select');
@@ -438,7 +451,11 @@
                     banner.className = 'border-t border-blue-200 bg-blue-50';
                     icon.className = 'spinner';
                     message.textContent = data.message;
-                    detail.textContent = `Processing ${data.files_processed} of ${data.files_found} files...`;
+                    const processedCount = data.total_processed || 0;
+                    const detailText = processedCount > 0
+                        ? `Processing ${data.files_processed} new files (${processedCount} already ingested)...`
+                        : `Processing ${data.files_processed} of ${data.files_found} files...`;
+                    detail.textContent = detailText;
                     dismissBtn.classList.add('hidden');
                 } else if (data.complete && data.files_processed > 0) {
                     // Show completion status (can be dismissed)
@@ -447,7 +464,8 @@
                     icon.className = '';
                     icon.innerHTML = '<svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
                     message.textContent = data.message;
-                    detail.textContent = '';
+                    const totalProcessed = data.total_processed || 0;
+                    detail.textContent = totalProcessed > 0 ? `Total files ingested: ${totalProcessed}` : '';
                     dismissBtn.classList.remove('hidden');
 
                     // Update health to refresh chunk count
@@ -462,19 +480,20 @@
                     detail.textContent = '';
                     dismissBtn.classList.remove('hidden');
                 } else if (data.complete && data.message && data.message.includes('already ingested')) {
-                    // All files already processed - show briefly then auto-dismiss
+                    // All files already processed - show with count
                     banner.classList.remove('hidden');
-                    banner.className = 'border-t border-blue-200 bg-blue-50';
+                    banner.className = 'border-t border-green-200 bg-green-50';
                     icon.className = '';
-                    icon.innerHTML = '<svg class="h-5 w-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+                    icon.innerHTML = '<svg class="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
                     message.textContent = data.message;
-                    detail.textContent = '';
+                    const totalProcessed = data.total_processed || data.files_found;
+                    detail.textContent = `All ${totalProcessed} PDFs have been ingested. No new files to process.`;
                     dismissBtn.classList.remove('hidden');
 
-                    // Auto-dismiss after 5 seconds
+                    // Auto-dismiss after 8 seconds
                     setTimeout(() => {
                         banner.classList.add('hidden');
-                    }, 5000);
+                    }, 8000);
                 }
             } catch (error) {
                 console.error('Failed to check auto-ingestion status:', error);
@@ -484,6 +503,111 @@
         function dismissAutoIngestBanner() {
             const banner = document.getElementById('auto-ingest-banner');
             banner.classList.add('hidden');
+        }
+
+        // Update file status display
+        async function updateFileStatus() {
+            try {
+                const response = await fetch('/api/auto-ingest/status');
+                const data = await response.json();
+
+                const container = document.getElementById('file-status-container');
+
+                const processedFiles = data.processed_files || [];
+                const failedFiles = data.failed_files || [];
+                const totalProcessed = data.total_processed || 0;
+                const totalFailed = data.total_failed || 0;
+
+                let html = '';
+
+                // Summary section
+                html += `
+                    <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                        <div class="grid grid-cols-2 gap-4 text-center">
+                            <div>
+                                <div class="text-2xl font-bold text-green-600">${totalProcessed}</div>
+                                <div class="text-sm text-gray-600">Files Ingested</div>
+                            </div>
+                            <div>
+                                <div class="text-2xl font-bold text-${totalFailed > 0 ? 'red' : 'gray'}-600">${totalFailed}</div>
+                                <div class="text-sm text-gray-600">Failed</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                // Status message
+                if (data.running) {
+                    html += `
+                        <div class="flex items-center p-3 bg-blue-50 border border-blue-200 rounded-lg mb-3">
+                            <div class="spinner mr-3"></div>
+                            <div>
+                                <div class="text-sm font-medium text-blue-900">${data.message}</div>
+                                <div class="text-xs text-blue-700">Processing ${data.files_processed} of ${data.files_found} new files...</div>
+                            </div>
+                        </div>
+                    `;
+                } else if (totalProcessed === 0 && totalFailed === 0) {
+                    html += `
+                        <div class="flex items-center p-3 bg-gray-50 border border-gray-200 rounded-lg mb-3">
+                            <svg class="h-5 w-5 text-gray-400 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            <div class="text-sm text-gray-600">No PDFs have been ingested yet. Add PDFs to the pdfs/ folder and restart, or upload files below.</div>
+                        </div>
+                    `;
+                }
+
+                // File lists
+                if (processedFiles.length > 0 || failedFiles.length > 0) {
+                    html += '<div class="space-y-2 max-h-64 overflow-y-auto">';
+
+                    // Successfully processed files
+                    if (processedFiles.length > 0) {
+                        html += '<h3 class="text-sm font-semibold text-gray-700 mb-2">✓ Successfully Ingested Files:</h3>';
+                        processedFiles.forEach(file => {
+                            html += `
+                                <div class="flex items-center p-2 bg-green-50 border border-green-200 rounded text-sm">
+                                    <svg class="h-4 w-4 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span class="text-green-900 truncate">${file}</span>
+                                </div>
+                            `;
+                        });
+                    }
+
+                    // Failed files
+                    if (failedFiles.length > 0) {
+                        html += '<h3 class="text-sm font-semibold text-gray-700 mb-2 mt-3">✗ Failed Files:</h3>';
+                        failedFiles.forEach(file => {
+                            html += `
+                                <div class="flex items-center p-2 bg-red-50 border border-red-200 rounded text-sm">
+                                    <svg class="h-4 w-4 text-red-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    <span class="text-red-900 truncate">${file}</span>
+                                </div>
+                            `;
+                        });
+                    }
+
+                    html += '</div>';
+                }
+
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Failed to update file status:', error);
+                const container = document.getElementById('file-status-container');
+                container.innerHTML = `
+                    <div class="flex items-center justify-center py-8 text-red-500">
+                        <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                        <span>Failed to load file status</span>
+                    </div>
+                `;
+            }
         }
 
         // Health check

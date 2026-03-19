@@ -35,6 +35,7 @@ class MedicalRAG:
         self,
         vector_db: VectorDatabase = None,
         model: str = None,
+        base_url: str | None = None,
         temperature: float = None,
         max_tokens: int = None,
         system_prompt: str = None,
@@ -45,14 +46,19 @@ class MedicalRAG:
         Args:
             vector_db: VectorDatabase instance (creates new if None)
             model: Ollama model name (defaults to config)
+            base_url: Ollama base URL (defaults to config)
             temperature: Generation temperature (defaults to config)
             max_tokens: Maximum tokens to generate (defaults to config)
             system_prompt: Custom system prompt (uses default if None)
         """
         self.vector_db = vector_db or VectorDatabase()
         self.model = model or settings.ollama_model
+        self.base_url = base_url or settings.ollama_base_url
         self.temperature = temperature or settings.temperature
         self.max_tokens = max_tokens or settings.max_tokens
+
+        # Initialize Ollama client with correct host
+        self.ollama_client = ollama.Client(host=self.base_url)
 
         # Default medical research assistant prompt
         self.system_prompt = system_prompt or self._get_default_system_prompt()
@@ -85,7 +91,7 @@ Be rigorous, evidence-based, and transparent about the limitations of the availa
     def _check_model_availability(self) -> None:
         """Check if the configured model is available in Ollama."""
         try:
-            response = ollama.list()
+            response = self.ollama_client.list()
             available_models = [model["name"].split(":")[0] for model in response.get("models", [])]
 
             if self.model.split(":")[0] not in available_models:
@@ -176,7 +182,7 @@ QUESTION: {query}
 ANSWER (remember to cite sources):"""
 
         try:
-            response = ollama.chat(
+            response = self.ollama_client.chat(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": self.system_prompt},

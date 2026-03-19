@@ -133,6 +133,7 @@ class IngestionProgress:
             "total_failed": len(self.failed_files),
             "started_at": self.started_at,
             "last_updated": self.last_updated,
+            "processed_files": list(self.processed_files),
             "failed_files": list(self.failed_files.keys()),
         }
 

@@ -118,7 +118,7 @@ async def query_rag(request: Request, query_request: QueryRequest) -> QueryRespo
             question=response.question,
             answer=response.answer,
             sources=response.sources,
-            context_chunks=response.context_chunks if request.return_context else None,
+            context_chunks=response.context_chunks if query_request.return_context else None,
             model_used=response.model_used,
             query_time=query_time
         )

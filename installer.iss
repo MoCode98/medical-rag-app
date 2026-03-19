@@ -66,6 +66,7 @@ Source: "pdfs\*"; DestDir: "{app}\pdfs"; Flags: ignoreversion recursesubdirs cre
 Source: "START_APP.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "STOP_APP.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "DOWNLOAD_MODELS.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "POST_INSTALL_SETUP.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "CHECK_STATUS.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "DEBUG_INGESTION.bat"; DestDir: "{app}"; Flags: ignoreversion
 
@@ -85,6 +86,7 @@ Source: "WINDOWS_INSTALLER_README.txt"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{autoprograms}\{#MyAppName}\Start Medical RAG"; Filename: "{app}\START_APP.bat"; WorkingDir: "{app}"
 Name: "{autoprograms}\{#MyAppName}\Stop Medical RAG"; Filename: "{app}\STOP_APP.bat"; WorkingDir: "{app}"
 Name: "{autoprograms}\{#MyAppName}\Check Status"; Filename: "{app}\CHECK_STATUS.bat"; WorkingDir: "{app}"
+Name: "{autoprograms}\{#MyAppName}\Complete Setup (First Time)"; Filename: "{app}\POST_INSTALL_SETUP.bat"; WorkingDir: "{app}"
 Name: "{autoprograms}\{#MyAppName}\Download AI Models"; Filename: "{app}\DOWNLOAD_MODELS.bat"; WorkingDir: "{app}"
 Name: "{autoprograms}\{#MyAppName}\Debug Ingestion"; Filename: "{app}\DEBUG_INGESTION.bat"; WorkingDir: "{app}"
 Name: "{autoprograms}\{#MyAppName}\Open Web Interface"; Filename: "http://localhost:8000"
@@ -92,7 +94,8 @@ Name: "{autoprograms}\{#MyAppName}\{cm:UninstallProgram,{#MyAppName}}"; Filename
 Name: "{autodesktop}\Medical Research RAG"; Filename: "{app}\START_APP.bat"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\WINDOWS_INSTALLER_README.txt"; Description: "View Setup Instructions"; Flags: postinstall shellexec skipifsilent
+Filename: "{app}\WINDOWS_INSTALLER_README.txt"; Description: "View Setup Instructions"; Flags: postinstall shellexec skipifsilent unchecked
+Filename: "{app}\POST_INSTALL_SETUP.bat"; Description: "Complete setup now (download AI models, ~5GB, 10-30 min)"; Flags: postinstall nowait skipifsilent
 
 [Code]
 function InitializeSetup(): Boolean;

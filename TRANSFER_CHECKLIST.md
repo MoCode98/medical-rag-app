@@ -38,20 +38,21 @@
 If you only want to update the installer project on Windows, transfer these **10 files**:
 
 #### Core Application Files (5):
-- [ ] `src/rag_pipeline.py`
-- [ ] `src/ingestion_progress.py`
-- [ ] `api/query.py`
-- [ ] `app.py`
-- [ ] `static/index.html`
+- [ ] `src/rag_pipeline.py` - Fixed query Ollama connection
+- [ ] `src/ingestion_progress.py` - Fixed persistence tracking
+- [ ] `api/query.py` - Fixed response parameter bug
+- [ ] `app.py` - Enhanced status endpoint
+- [ ] `static/index.html` - GUI improvements + query spinner fix
 
 #### Installer Files (2):
 - [ ] `POST_INSTALL_SETUP.bat`
 - [ ] `installer.iss`
 
-#### Documentation (3):
+#### Documentation (4):
 - [ ] `WINDOWS_INSTALLER_README.txt`
 - [ ] `COMPLETE_UPDATE_SUMMARY.md`
 - [ ] `WINDOWS_UPDATE_INSTRUCTIONS.md`
+- [ ] `BUGFIX_QUERY_SPINNER.md` - NEW: Query spinner fix guide
 
 **Windows Destination:**
 ```

@@ -35,27 +35,33 @@
 
 ### Option 2: Transfer Only Critical Files (Faster)
 
-If you only want to update the installer project on Windows, transfer these **13 files**:
+If you only want to update the installer project on Windows, transfer these **17 files**:
 
 #### Core Application Files (6):
 - [ ] `src/rag_pipeline.py` - Fixed query Ollama connection
 - [ ] `src/ingestion_progress.py` - Fixed persistence tracking
 - [ ] `api/query.py` - Fixed response parameter bug
-- [ ] `api/ingest.py` - **NEW:** Fixed PDF upload 500 error
+- [ ] `api/ingest.py` - Fixed PDF upload endpoint
 - [ ] `app.py` - Enhanced status endpoint
-- [ ] `static/index.html` - GUI improvements + query spinner fix
+- [ ] `static/index.html` - GUI improvements (spinner, banner, context)
+
+#### Docker Files (2):
+- [ ] `Dockerfile` - **NEW:** Automatic permissions fix
+- [ ] `docker-entrypoint.sh` - **NEW:** Permission verification script
 
 #### Installer Files (3):
 - [ ] `POST_INSTALL_SETUP.bat`
 - [ ] `installer.iss`
-- [ ] `app_icon.ico` - **NEW:** Custom application icon
+- [ ] `app_icon.ico` - Custom application icon
 
-#### Documentation (5):
+#### Documentation (6):
 - [ ] `WINDOWS_INSTALLER_README.txt`
 - [ ] `COMPLETE_UPDATE_SUMMARY.md`
 - [ ] `WINDOWS_UPDATE_INSTRUCTIONS.md`
-- [ ] `BUGFIX_QUERY_SPINNER.md` - Query spinner fix guide
-- [ ] `BUGFIX_UPLOAD_500_ERROR.md` - **NEW:** Upload fix guide
+- [ ] `BUGFIX_QUERY_SPINNER.md`
+- [ ] `BUGFIX_UPLOAD_500_ERROR.md`
+- [ ] `BUGFIX_BANNER_AND_CONTEXT.md` - **NEW:** Banner + context fixes
+- [ ] `DOCKER_PERMISSIONS_FIX.md` - **NEW:** Automatic permissions solution
 
 **Windows Destination:**
 ```

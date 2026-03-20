@@ -35,24 +35,27 @@
 
 ### Option 2: Transfer Only Critical Files (Faster)
 
-If you only want to update the installer project on Windows, transfer these **10 files**:
+If you only want to update the installer project on Windows, transfer these **13 files**:
 
-#### Core Application Files (5):
+#### Core Application Files (6):
 - [ ] `src/rag_pipeline.py` - Fixed query Ollama connection
 - [ ] `src/ingestion_progress.py` - Fixed persistence tracking
 - [ ] `api/query.py` - Fixed response parameter bug
+- [ ] `api/ingest.py` - **NEW:** Fixed PDF upload 500 error
 - [ ] `app.py` - Enhanced status endpoint
 - [ ] `static/index.html` - GUI improvements + query spinner fix
 
-#### Installer Files (2):
+#### Installer Files (3):
 - [ ] `POST_INSTALL_SETUP.bat`
 - [ ] `installer.iss`
+- [ ] `app_icon.ico` - **NEW:** Custom application icon
 
-#### Documentation (4):
+#### Documentation (5):
 - [ ] `WINDOWS_INSTALLER_README.txt`
 - [ ] `COMPLETE_UPDATE_SUMMARY.md`
 - [ ] `WINDOWS_UPDATE_INSTRUCTIONS.md`
-- [ ] `BUGFIX_QUERY_SPINNER.md` - NEW: Query spinner fix guide
+- [ ] `BUGFIX_QUERY_SPINNER.md` - Query spinner fix guide
+- [ ] `BUGFIX_UPLOAD_500_ERROR.md` - **NEW:** Upload fix guide
 
 **Windows Destination:**
 ```
@@ -61,10 +64,12 @@ C:\path\to\installer-location\
 │   ├── rag_pipeline.py           ← Replace
 │   └── ingestion_progress.py     ← Replace
 ├── api\
-│   └── query.py                  ← Replace
+│   ├── query.py                  ← Replace
+│   └── ingest.py                 ← Replace (NEW)
 ├── static\
 │   └── index.html                ← Replace
 ├── app.py                        ← Replace
+├── app_icon.ico                  ← New file
 ├── POST_INSTALL_SETUP.bat        ← New file
 ├── installer.iss                 ← Replace
 └── WINDOWS_INSTALLER_README.txt  ← Replace

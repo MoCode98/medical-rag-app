@@ -1145,7 +1145,10 @@
 
                 // Remove loading, add response
                 clearInterval(elapsedInterval);
-                document.getElementById(loadingId).remove();
+                const loadingElement = document.getElementById(loadingId);
+                if (loadingElement) {
+                    loadingElement.remove();
+                }
                 addMessage('assistant', formatResponse(data));
 
                 // Store in history
@@ -1153,7 +1156,10 @@
 
             } catch (error) {
                 clearInterval(elapsedInterval);
-                document.getElementById(loadingId).remove();
+                const loadingElement = document.getElementById(loadingId);
+                if (loadingElement) {
+                    loadingElement.remove();
+                }
                 addMessage('assistant', `❌ Error: ${error.message}`);
             } finally {
                 input.disabled = false;

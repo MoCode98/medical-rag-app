@@ -7,9 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 
 from src.chunker import IntelligentChunker
 from src.config import settings
@@ -29,7 +27,7 @@ ingestion_status = {"is_running": False, "progress": 0, "message": "", "files_pr
 
 
 @router.post("/upload")
-async def upload_pdfs(request: Request, files: list[UploadFile] = File(...)) -> dict[str, Any]:
+async def upload_pdfs(files: list[UploadFile] = File(...)) -> dict[str, Any]:
     """
     Upload PDF files to the pdf folder.
 

@@ -445,8 +445,20 @@
                 const detail = document.getElementById('auto-ingest-detail');
                 const dismissBtn = document.getElementById('auto-ingest-dismiss');
 
+                // Check if banner was dismissed
+                if (bannerDismissed || localStorage.getItem('autoIngestBannerDismissed') === 'true') {
+                    // Don't show banner if user dismissed it, unless ingestion is actively running
+                    if (!data.running) {
+                        return;
+                    }
+                }
+
                 if (data.running) {
-                    // Show running status
+                    // Show running status (can't be dismissed while running)
+                    // Clear dismissed state so user can see progress
+                    bannerDismissed = false;
+                    localStorage.removeItem('autoIngestBannerDismissed');
+
                     banner.classList.remove('hidden');
                     banner.className = 'border-t border-blue-200 bg-blue-50';
                     icon.className = 'spinner';
@@ -500,9 +512,14 @@
             }
         }
 
+        let bannerDismissed = false;
+
         function dismissAutoIngestBanner() {
             const banner = document.getElementById('auto-ingest-banner');
             banner.classList.add('hidden');
+            bannerDismissed = true;
+            // Save dismissed state to localStorage
+            localStorage.setItem('autoIngestBannerDismissed', 'true');
         }
 
         // Update file status display
@@ -1132,7 +1149,7 @@
                         top_k: topK,
                         model,
                         temperature,
-                        return_context: false
+                        return_context: true
                     })
                 });
 

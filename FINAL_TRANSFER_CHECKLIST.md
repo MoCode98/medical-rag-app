@@ -41,6 +41,14 @@
 - **Fix:** Changed return_context to true
 - **Status:** ✅ Applied
 
+### 7. Automatic Installation Ingestion
+- **Files:**
+  - `POST_INSTALL_SETUP.bat` (Steps 5-7 added)
+  - `wait_for_ingestion.ps1` (NEW - PowerShell monitoring script)
+  - `installer.iss` (updated to include new scripts)
+- **Fix:** Automatic PDF ingestion during installation
+- **Status:** ✅ Applied
+
 ---
 
 ## 📦 Files to Transfer (Zip Entire Project)
@@ -51,22 +59,25 @@
 3. ✅ `api/ingest.py` - Upload endpoint fix
 4. ✅ `static/index.html` - GUI fixes (spinner, banner, context)
 5. ✅ `app_icon.ico` - Custom application icon
-6. ✅ `installer.iss` - Windows installer with icon
+6. ✅ `installer.iss` - Windows installer with icon + ingestion
 7. ✅ `docker-compose.yml` - Container orchestration
+8. ✅ `POST_INSTALL_SETUP.bat` - Installation script with auto-ingestion
+9. ✅ `wait_for_ingestion.ps1` - NEW ingestion monitoring script
 
 ### Supporting Files:
-8. ✅ `create_icon.py` - Icon generation script
-9. ✅ `requirements.txt` - Python dependencies
-10. ✅ All `src/` files - Application source code
-11. ✅ All `api/` files - API endpoints
-12. ✅ `.env` - Environment configuration
-13. ✅ Windows batch scripts (START_APP.bat, etc.)
+10. ✅ `create_icon.py` - Icon generation script
+11. ✅ `requirements.txt` - Python dependencies
+12. ✅ All `src/` files - Application source code
+13. ✅ All `api/` files - API endpoints
+14. ✅ `.env` - Environment configuration
+15. ✅ Windows batch scripts (START_APP.bat, STOP_APP.bat, etc.)
 
 ### Documentation:
-14. ✅ `DOCKER_PERMISSIONS_FIX.md` - Permission fix documentation
-15. ✅ `UPLOAD_TROUBLESHOOTING.md` - Upload debugging guide
-16. ✅ `CREATE_ICON_GUIDE.md` - Icon creation guide
-17. ✅ `TRANSFER_CHECKLIST.md` - Transfer instructions
+16. ✅ `DOCKER_PERMISSIONS_FIX.md` - Permission fix documentation
+17. ✅ `UPLOAD_TROUBLESHOOTING.md` - Upload debugging guide
+18. ✅ `CREATE_ICON_GUIDE.md` - Icon creation guide
+19. ✅ `INSTALLATION_INGESTION.md` - NEW automatic ingestion docs
+20. ✅ `TRANSFER_CHECKLIST.md` - Transfer instructions
 
 ---
 

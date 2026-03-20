@@ -30,15 +30,22 @@ COPY api/ ./api/
 COPY static/ ./static/
 COPY app.py ingest.py query.py query_enhanced.py ./
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Create directories for volumes
 # These will be mounted as volumes but need to exist in the image
+# Use 777 permissions to ensure write access across different host systems (Windows/Mac/Linux)
 RUN mkdir -p pdfs vector_db data logs && \
-    chmod 755 pdfs vector_db data logs
+    chmod 777 pdfs vector_db data logs
 
 # Create non-root user for security
 # Using UID 1000 which is common on Linux/Mac/Windows
 RUN useradd -m -u 1000 appuser && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app && \
+    # Ensure volume mount points are writable
+    chmod 777 /app/pdfs /app/vector_db /app/data /app/logs
 
 # Switch to non-root user
 USER appuser
@@ -50,6 +57,9 @@ EXPOSE 8000
 # Poll the /health endpoint to verify service is running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import httpx; exit(0 if httpx.get('http://localhost:8000/health').status_code == 200 else 1)"
+
+# Use entrypoint script to check permissions before starting app
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Run application
 CMD ["python", "app.py"]

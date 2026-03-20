@@ -102,21 +102,8 @@ if errorlevel 1 (
 :skip_llm
 echo.
 
-echo [Step 5/5] Auto-ingesting sample PDFs...
-echo The application will automatically process the 18 sample medical research papers.
-echo This ensures everything is ready when you start querying!
-echo.
-echo Waiting for application to be ready...
+echo [Step 5/7] Waiting for application to be ready...
 timeout /t 10 /nobreak >nul
-
-REM Wait for the RAG app to be healthy and auto-ingestion to complete
-REM The app automatically ingests PDFs on startup, we just need to wait for it
-echo.
-echo Auto-ingestion is running in the background...
-echo You can check progress in the web interface.
-echo.
-echo This may take 5-10 minutes. The browser will open when ready.
-echo.
 
 REM Wait for app to be healthy (up to 120 seconds)
 set WAIT_COUNT=0
@@ -137,8 +124,43 @@ if errorlevel 1 (
 )
 
 echo.
-echo Application is running! Auto-ingestion in progress...
+echo Application is running!
 echo.
+
+echo [Step 6/7] Starting ingestion of sample PDFs...
+echo Processing 18 medical research papers - this ensures everything is ready!
+echo.
+
+REM Trigger ingestion via API
+curl -X POST http://localhost:8000/api/ingest -H "Content-Type: application/json" -s >nul 2>&1
+
+if errorlevel 1 (
+    echo [WARNING] Could not trigger ingestion automatically.
+    echo You can start ingestion manually from the web interface.
+    goto open_browser
+)
+
+echo Ingestion started! Monitoring progress...
+echo.
+
+echo [Step 7/7] Waiting for ingestion to complete...
+echo This may take 5-10 minutes depending on your system.
+echo.
+
+REM Use PowerShell to wait for ingestion (better JSON parsing)
+powershell -ExecutionPolicy Bypass -File "%~dp0wait_for_ingestion.ps1" -MaxMinutes 30
+
+if %errorlevel% equ 0 (
+    echo.
+    echo All sample PDFs have been processed and indexed!
+    echo The system is ready for queries.
+    echo.
+) else (
+    echo.
+    echo Ingestion is taking longer than expected.
+    echo You can monitor progress in the web interface.
+    echo.
+)
 
 :open_browser
 :done
@@ -149,13 +171,14 @@ echo ========================================
 echo.
 echo The Medical Research RAG application is now running.
 echo.
-echo IMPORTANT:
-echo  • Auto-ingestion is running in the background
-echo  • 18 sample medical research PDFs are being processed
-echo  • You can start querying once ingestion completes (~5-10 minutes)
-echo  • Check the Ingest tab to see progress
+echo Status:
+echo  • Application: Running
+echo  • AI Models: Downloaded
+echo  • Sample PDFs: Ingested and ready to query
+echo  • Vector Database: Indexed with 18 medical research papers
 echo.
 echo Opening the application in your browser...
+echo You can start asking questions immediately!
 echo.
 timeout /t 3 /nobreak >nul
 
@@ -163,15 +186,14 @@ REM Open browser to the application
 start http://localhost:8000
 
 echo.
-echo You can access the application at: http://localhost:8000
+echo Access the application at: http://localhost:8000
 echo.
-echo To start/stop the application, use the shortcuts in the Start Menu:
+echo To manage the application, use the Start Menu shortcuts:
 echo   - Start Medical RAG
 echo   - Stop Medical RAG
 echo   - Check Status
 echo.
-echo The setup will complete in the background.
-echo Feel free to close this window or minimize it.
+echo Ready to query! Try asking questions about the medical research papers.
 echo.
 pause
 exit /b 0

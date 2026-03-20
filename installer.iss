@@ -47,6 +47,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; Application files
 Source: "docker-compose.yml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "Dockerfile"; DestDir: "{app}"; Flags: ignoreversion
+Source: "docker-entrypoint.sh"; DestDir: "{app}"; Flags: ignoreversion
 Source: ".dockerignore"; DestDir: "{app}"; Flags: ignoreversion
 Source: "requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "app.py"; DestDir: "{app}"; Flags: ignoreversion
@@ -72,6 +73,7 @@ Source: "DOWNLOAD_MODELS.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "POST_INSTALL_SETUP.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "CHECK_STATUS.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "DEBUG_INGESTION.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "wait_for_ingestion.ps1"; DestDir: "{app}"; Flags: ignoreversion
 
 ; Scripts folder (backup, restore, PDF metadata tools)
 Source: "scripts\*"; DestDir: "{app}\scripts"; Flags: ignoreversion recursesubdirs createallsubdirs

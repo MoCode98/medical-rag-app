@@ -30,7 +30,7 @@ LicenseFile=LICENSE
 ; PrivilegesRequired=admin
 OutputDir=installer_output
 OutputBaseFilename=MedicalResearchRAG_Setup
-SetupIconFile=
+SetupIconFile=app_icon.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -62,6 +62,9 @@ Source: "static\*"; DestDir: "{app}\static"; Flags: ignoreversion recursesubdirs
 ; PDF files (medical research papers)
 Source: "pdfs\*"; DestDir: "{app}\pdfs"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+; Icon file
+Source: "app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
+
 ; Batch scripts
 Source: "START_APP.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "STOP_APP.bat"; DestDir: "{app}"; Flags: ignoreversion
@@ -83,15 +86,15 @@ Source: "QUICK_START_WEB_UI.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "WINDOWS_INSTALLER_README.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}\Start Medical RAG"; Filename: "{app}\START_APP.bat"; WorkingDir: "{app}"
-Name: "{autoprograms}\{#MyAppName}\Stop Medical RAG"; Filename: "{app}\STOP_APP.bat"; WorkingDir: "{app}"
-Name: "{autoprograms}\{#MyAppName}\Check Status"; Filename: "{app}\CHECK_STATUS.bat"; WorkingDir: "{app}"
-Name: "{autoprograms}\{#MyAppName}\Complete Setup (First Time)"; Filename: "{app}\POST_INSTALL_SETUP.bat"; WorkingDir: "{app}"
-Name: "{autoprograms}\{#MyAppName}\Download AI Models"; Filename: "{app}\DOWNLOAD_MODELS.bat"; WorkingDir: "{app}"
-Name: "{autoprograms}\{#MyAppName}\Debug Ingestion"; Filename: "{app}\DEBUG_INGESTION.bat"; WorkingDir: "{app}"
-Name: "{autoprograms}\{#MyAppName}\Open Web Interface"; Filename: "http://localhost:8000"
+Name: "{autoprograms}\{#MyAppName}\Start Medical RAG"; Filename: "{app}\START_APP.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"
+Name: "{autoprograms}\{#MyAppName}\Stop Medical RAG"; Filename: "{app}\STOP_APP.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"
+Name: "{autoprograms}\{#MyAppName}\Check Status"; Filename: "{app}\CHECK_STATUS.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"
+Name: "{autoprograms}\{#MyAppName}\Complete Setup (First Time)"; Filename: "{app}\POST_INSTALL_SETUP.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"
+Name: "{autoprograms}\{#MyAppName}\Download AI Models"; Filename: "{app}\DOWNLOAD_MODELS.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"
+Name: "{autoprograms}\{#MyAppName}\Debug Ingestion"; Filename: "{app}\DEBUG_INGESTION.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"
+Name: "{autoprograms}\{#MyAppName}\Open Web Interface"; Filename: "http://localhost:8000"; IconFilename: "{app}\app_icon.ico"
 Name: "{autoprograms}\{#MyAppName}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\Medical Research RAG"; Filename: "{app}\START_APP.bat"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\Medical Research RAG"; Filename: "{app}\START_APP.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app_icon.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\WINDOWS_INSTALLER_README.txt"; Description: "View Setup Instructions"; Flags: postinstall shellexec skipifsilent unchecked

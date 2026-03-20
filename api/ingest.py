@@ -7,8 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -25,15 +24,11 @@ from src.vector_db import VectorDatabase
 router = APIRouter()
 logger = get_logger()
 
-# Initialize limiter for this router
-limiter = Limiter(key_func=get_remote_address)
-
 # Global state for tracking ingestion
 ingestion_status = {"is_running": False, "progress": 0, "message": "", "files_processed": []}
 
 
 @router.post("/upload")
-@limiter.limit(f"{settings.rate_limit_upload_per_hour}/hour")
 async def upload_pdfs(request: Request, files: list[UploadFile] = File(...)) -> dict[str, Any]:
     """
     Upload PDF files to the pdf folder.
@@ -88,8 +83,8 @@ async def upload_pdfs(request: Request, files: list[UploadFile] = File(...)) -> 
         }
 
     except Exception as e:
-        logger.error(f"Upload error: {e}")
-        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+        logger.error(f"Upload error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/ingest")

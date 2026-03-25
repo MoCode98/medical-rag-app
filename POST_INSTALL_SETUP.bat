@@ -87,10 +87,10 @@ if errorlevel 1 (
 )
 
 echo.
-echo Downloading LLM model (deepseek-r1:7b, 4.7GB)...
-echo This is the large language model - this will take a while...
+echo Downloading LLM model (deepseek-r1:1.5b, 900MB)...
+echo This is the large language model - much faster download!
 echo.
-docker compose exec -T ollama ollama pull deepseek-r1:7b
+docker compose exec -T ollama ollama pull deepseek-r1:1.5b
 
 if errorlevel 1 (
     echo.

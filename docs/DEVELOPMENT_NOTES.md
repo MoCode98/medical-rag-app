@@ -404,7 +404,7 @@ docker compose logs rag-app | Select-String "pdfs folder write test passed"
 
 - **FastAPI** - Web framework
 - **Docker + Docker Compose** - Container orchestration
-- **Ollama** - Local LLM service (nomic-embed-text, deepseek-r1:7b)
+- **Ollama** - Local LLM service (nomic-embed-text, deepseek-r1:1.5b)
 - **ChromaDB** - Vector database
 - **Inno Setup** - Windows installer creation
 - **PowerShell** - Windows automation

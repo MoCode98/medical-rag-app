@@ -32,7 +32,7 @@ PDFs → Parse (pymupdf4llm) → Chunk (section-aware) → Embed (nomic-embed-te
 
    # Pull required models (in a new terminal)
    ollama pull nomic-embed-text
-   ollama pull deepseek-r1:7b  # or your preferred model
+   ollama pull deepseek-r1:1.5b  # or your preferred model
    ```
 
 ## Quick Start
@@ -119,7 +119,7 @@ docker compose up -d
 
 # Download AI models (one-time setup)
 docker compose exec ollama ollama pull nomic-embed-text
-docker compose exec ollama ollama pull deepseek-r1:7b
+docker compose exec ollama ollama pull deepseek-r1:1.5b
 
 # Access the Web UI
 # Open http://localhost:8000 in your browser
@@ -174,7 +174,7 @@ Edit `docker-compose.yml` to customize:
 
 ```yaml
 environment:
-  - OLLAMA_MODEL=deepseek-r1:7b        # Change AI model
+  - OLLAMA_MODEL=deepseek-r1:1.5b      # Change AI model
   - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
   - CHUNK_SIZE=512                      # Chunking parameters
   - TOP_K_RESULTS=5                     # Retrieval settings
@@ -264,7 +264,7 @@ Edit [.env](.env) to customize settings:
 ```bash
 # Ollama Configuration
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=deepseek-r1:7b
+OLLAMA_MODEL=deepseek-r1:1.5b
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text
 
 # Chunking Configuration
@@ -289,7 +289,7 @@ python query.py --interactive
 ```
 Medical Research RAG Assistant - Interactive Session
 ================================================================================
-Model: deepseek-r1:7b
+Model: deepseek-r1:1.5b
 Database: medical_research (234 chunks)
 
 Your question: What are the inclusion criteria for the study?

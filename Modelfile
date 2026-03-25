@@ -6,12 +6,13 @@
 # 2. Run it: ollama run medical-assistant
 # 3. Update .env: OLLAMA_MODEL=medical-assistant
 
-# Base model - using deepseek-r1:7b as default
+# Base model - using deepseek-r1:1.5b for efficiency
+# This smaller model is optimized for RAG tasks and provides fast responses
 # You can change this to any available model:
-# - llama3.2 (good general purpose)
-# - mistral (fast and capable)
+# - llama3.2:3b (larger, better quality)
+# - deepseek-r1:7b (original, higher quality but slower)
 # - biomistral (specialized medical model if available)
-FROM deepseek-r1:7b
+FROM deepseek-r1:1.5b
 
 # System prompt for medical research assistant
 SYSTEM """You are a knowledgeable medical research assistant with expertise in analyzing and synthesizing scientific literature. Your role is to:

@@ -1,6 +1,6 @@
 @echo off
 REM Medical Research RAG - Model Download Script
-REM This script downloads the AI models (one-time setup, ~5GB)
+REM This script downloads the AI models (one-time setup, ~1.2GB)
 
 echo.
 echo ========================================
@@ -29,8 +29,8 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo This will download approximately 5GB of data.
-echo It may take 10-30 minutes depending on your internet speed.
+echo This will download approximately 1.2GB of data.
+echo It may take 3-10 minutes depending on your internet speed.
 echo.
 choice /C YN /M "Continue with download"
 if errorlevel 2 goto cancelled
@@ -50,10 +50,10 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/2] Downloading LLM model (deepseek-r1:7b, 4.7GB)...
-echo This will take a while...
+echo [2/2] Downloading LLM model (deepseek-r1:1.5b, 900MB)...
+echo This is much faster than larger models!
 echo.
-docker compose exec -T ollama ollama pull deepseek-r1:7b
+docker compose exec -T ollama ollama pull deepseek-r1:1.5b
 
 if errorlevel 1 (
     echo.

@@ -255,8 +255,14 @@ async def run_auto_ingestion():
 @app.on_event("startup")
 async def startup_event():
     """Run auto-ingestion on startup."""
-    logger.info("Starting background auto-ingestion task...")
-    asyncio.create_task(run_auto_ingestion())
+    if IS_DESKTOP_MODE:
+        # Desktop mode: wait for ingestion to complete before opening browser
+        logger.info("Starting auto-ingestion (will open browser when complete)...")
+        await run_auto_ingestion()
+    else:
+        # Server mode: run in background
+        logger.info("Starting background auto-ingestion task...")
+        asyncio.create_task(run_auto_ingestion())
 
 
 def main():
@@ -315,12 +321,28 @@ def run_desktop():
     logger.info("Press CTRL+C to stop")
     logger.info("=" * 80)
 
-    # Open browser after a short delay
+    # Open browser after ingestion completes
     import threading
 
     def delayed_browser():
         import time
-        time.sleep(3)  # Wait for server to start
+        # Wait for server to start
+        time.sleep(3)
+
+        # Wait for auto-ingestion to complete
+        max_wait = 300  # Maximum 5 minutes
+        waited = 0
+        while waited < max_wait:
+            if auto_ingestion_status.get("complete", False):
+                # Ingestion complete
+                num_files = auto_ingestion_status.get("files_processed", 0)
+                if num_files > 0:
+                    logger.info(f"Auto-ingestion complete: {num_files} PDF(s) processed")
+                break
+            time.sleep(1)
+            waited += 1
+
+        # Open browser
         launcher.open_browser()
 
     browser_thread = threading.Thread(target=delayed_browser, daemon=True)

@@ -107,7 +107,6 @@ class OllamaManager:
             return False
 
         try:
-            import urllib.request
             import tempfile
 
             print("\n" + "=" * 60)
@@ -142,16 +141,23 @@ class OllamaManager:
 
             logger.info(f"Downloading Ollama from: {installer_url}")
 
-            # Download with progress
-            def download_progress(block_num, block_size, total_size):
-                downloaded = block_num * block_size
-                if total_size > 0:
-                    percent = min(100, (downloaded / total_size) * 100)
-                    mb_downloaded = downloaded / (1024 * 1024)
-                    mb_total = total_size / (1024 * 1024)
-                    print(f"\rProgress: {percent:.1f}% ({mb_downloaded:.1f}/{mb_total:.1f} MB)", end='', flush=True)
+            # Download with progress using httpx (handles SSL properly)
+            with httpx.stream("GET", installer_url, follow_redirects=True, timeout=300.0) as response:
+                response.raise_for_status()
+                total_size = int(response.headers.get("content-length", 0))
 
-            urllib.request.urlretrieve(installer_url, installer_path, download_progress)
+                downloaded = 0
+                with open(installer_path, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=8192):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+
+                        if total_size > 0:
+                            percent = (downloaded / total_size) * 100
+                            mb_downloaded = downloaded / (1024 * 1024)
+                            mb_total = total_size / (1024 * 1024)
+                            print(f"\rProgress: {percent:.1f}% ({mb_downloaded:.1f}/{mb_total:.1f} MB)", end='', flush=True)
+
             print("\n\nDownload complete!")
 
             # Run installer

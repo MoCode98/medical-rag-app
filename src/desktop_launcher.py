@@ -93,6 +93,109 @@ class OllamaManager:
         logger.warning("Ollama not found on system")
         return False
 
+    def install_ollama(self) -> bool:
+        """
+        Download and install Ollama (Windows only for now).
+
+        Returns:
+            True if installation successful, False otherwise
+        """
+        system = platform.system()
+
+        if system != "Windows":
+            logger.error("Automatic installation only supported on Windows")
+            return False
+
+        try:
+            import urllib.request
+            import tempfile
+
+            print("\n" + "=" * 60)
+            print("OLLAMA INSTALLATION")
+            print("=" * 60)
+            print("\nOllama is required but not installed.")
+            print("\nDownload size: ~570 MB")
+            print("Installation requires administrator privileges.")
+            print("\nWould you like to download and install it now?")
+            print("=" * 60)
+
+            response = input("\nContinue? (Y/N): ").strip().upper()
+
+            if response != 'Y':
+                print("\nInstallation cancelled.")
+                print("\nTo install manually:")
+                print("1. Visit: https://ollama.com/download/windows")
+                print("2. Download and run the installer")
+                print("3. Restart this application")
+                return False
+
+            print("\n" + "=" * 60)
+            print("Downloading Ollama installer...")
+            print("=" * 60)
+
+            # Ollama Windows installer URL
+            installer_url = "https://ollama.com/download/OllamaSetup.exe"
+
+            # Download to temp directory
+            temp_dir = Path(tempfile.gettempdir())
+            installer_path = temp_dir / "OllamaSetup.exe"
+
+            logger.info(f"Downloading Ollama from: {installer_url}")
+
+            # Download with progress
+            def download_progress(block_num, block_size, total_size):
+                downloaded = block_num * block_size
+                if total_size > 0:
+                    percent = min(100, (downloaded / total_size) * 100)
+                    mb_downloaded = downloaded / (1024 * 1024)
+                    mb_total = total_size / (1024 * 1024)
+                    print(f"\rProgress: {percent:.1f}% ({mb_downloaded:.1f}/{mb_total:.1f} MB)", end='', flush=True)
+
+            urllib.request.urlretrieve(installer_url, installer_path, download_progress)
+            print("\n\nDownload complete!")
+
+            # Run installer
+            print("\n" + "=" * 60)
+            print("Running installer...")
+            print("=" * 60)
+            print("\nA Windows UAC prompt will appear.")
+            print("Please click 'Yes' to allow installation.\n")
+
+            logger.info(f"Launching installer: {installer_path}")
+
+            # Run installer and wait for completion
+            result = subprocess.run(
+                [str(installer_path), "/S"],  # /S for silent install
+                check=False
+            )
+
+            if result.returncode == 0:
+                print("\n✓ Ollama installed successfully!")
+                logger.info("Ollama installation completed")
+
+                # Wait a moment for service to start
+                print("\nWaiting for Ollama service to start...")
+                time.sleep(5)
+
+                # Clean up installer
+                try:
+                    installer_path.unlink()
+                except Exception:
+                    pass
+
+                return True
+            else:
+                print(f"\n✗ Installation failed with code: {result.returncode}")
+                logger.error(f"Ollama installation failed: {result.returncode}")
+                return False
+
+        except Exception as e:
+            print(f"\n✗ Installation error: {e}")
+            logger.error(f"Failed to install Ollama: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
     def is_running(self) -> bool:
         """
         Check if Ollama service is running.
@@ -281,9 +384,28 @@ class DesktopLauncher:
         print(f"  [1/3] Ollama installation... ", end="")
         if not self.ollama.is_installed():
             print("✗ NOT FOUND")
-            self._show_ollama_install_instructions()
-            return False
-        print("✓ OK")
+
+            # Attempt automatic installation on Windows
+            system = platform.system()
+            if system == "Windows":
+                if self.ollama.install_ollama():
+                    # Installation successful, verify it's now detected
+                    if self.ollama.is_installed():
+                        print(f"  [1/3] Ollama installation... ✓ INSTALLED")
+                    else:
+                        print("\n✗ Installation completed but Ollama not detected.")
+                        print("  Please restart this application.")
+                        return False
+                else:
+                    # Installation cancelled or failed
+                    logger.error("Prerequisites not met. Exiting.")
+                    return False
+            else:
+                # macOS/Linux - show manual instructions
+                self._show_ollama_install_instructions()
+                return False
+        else:
+            print("✓ OK")
 
         # Check Ollama service
         print(f"  [2/3] Ollama service... ", end="")

@@ -59,6 +59,8 @@ datas = [
 # Collect data files from packages
 datas += collect_data_files('chromadb')
 datas += collect_data_files('tiktoken')
+datas += collect_data_files('pymupdf')
+datas += collect_data_files('pymupdf4llm')
 
 block_cipher = None
 

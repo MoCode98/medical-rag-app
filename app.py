@@ -6,11 +6,16 @@ FastAPI server that provides a web interface for the RAG pipeline.
 Includes document ingestion, query interface, and metrics dashboard.
 
 Usage:
+    # Standard mode (development):
     python app.py
+
+    # Desktop mode (production/bundled):
+    python app.py --desktop
 
 Then open http://localhost:8000 in your browser.
 """
 
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -30,6 +35,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from api import ingest, metrics, query
 from src.config import settings
 from src.logging_config import get_logger, setup_logging
+from src.user_data import get_user_data_manager
+
+# Desktop mode flag
+IS_DESKTOP_MODE = False
 
 # Global state for auto-ingestion
 auto_ingestion_status = {
@@ -133,11 +142,20 @@ async def run_auto_ingestion():
         from src.ingestion_progress import IngestionProgress
 
         # Ensure pdfs directory exists
-        pdf_dir = Path("pdfs")
-        pdf_dir.mkdir(exist_ok=True)
+        if IS_DESKTOP_MODE:
+            # Desktop mode: use user data directory
+            user_data = get_user_data_manager()
+            pdf_dir = user_data.get_pdfs_dir()
+            logger.info(f"Auto-ingestion: Using PDF directory: {pdf_dir}")
+        else:
+            # Development mode: use local pdfs/ folder
+            pdf_dir = Path("pdfs")
+            pdf_dir.mkdir(exist_ok=True)
+            logger.info(f"Auto-ingestion: Using PDF directory: {pdf_dir.absolute()}")
 
         # Get all PDF files
         pdf_files = list(pdf_dir.glob("*.pdf"))
+        logger.info(f"Auto-ingestion: Found {len(pdf_files)} PDF files in {pdf_dir}")
 
         if not pdf_files:
             auto_ingestion_status.update({
@@ -264,9 +282,75 @@ def main():
     )
 
 
+def run_desktop():
+    """Run in desktop mode with launcher checks."""
+    global IS_DESKTOP_MODE
+    IS_DESKTOP_MODE = True
+
+    # Import desktop launcher
+    from src.desktop_launcher import DesktopLauncher
+
+    # Initialize launcher
+    launcher = DesktopLauncher()
+
+    # Check prerequisites (Ollama, models, etc.)
+    if not launcher.check_prerequisites():
+        logger.error("Prerequisites not met. Exiting.")
+        sys.exit(1)
+
+    # Show storage info
+    info = launcher.user_data.get_storage_info()
+    logger.info(f"User data directory: {info['base_directory']}")
+
+    # Launch server
+    logger.info("=" * 80)
+    logger.info("Medical Research RAG - Desktop Application")
+    logger.info("=" * 80)
+    logger.info("")
+    logger.info("Starting server...")
+    logger.info("  • UI:  http://localhost:8000")
+    logger.info("  • API: http://localhost:8000/docs")
+    logger.info("")
+    logger.info("The application will open in your browser shortly...")
+    logger.info("Press CTRL+C to stop")
+    logger.info("=" * 80)
+
+    # Open browser after a short delay
+    import threading
+
+    def delayed_browser():
+        import time
+        time.sleep(3)  # Wait for server to start
+        launcher.open_browser()
+
+    browser_thread = threading.Thread(target=delayed_browser, daemon=True)
+    browser_thread.start()
+
+    # Run server
+    uvicorn.run(
+        app,
+        host="127.0.0.1",  # Desktop mode: only localhost
+        port=8000,
+        log_level="info",
+        access_log=False,  # Less verbose for desktop
+    )
+
+
 if __name__ == "__main__":
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Medical Research RAG Application")
+    parser.add_argument(
+        "--desktop",
+        action="store_true",
+        help="Run in desktop mode with Ollama checks and auto-browser"
+    )
+    args = parser.parse_args()
+
     try:
-        main()
+        if args.desktop:
+            run_desktop()
+        else:
+            main()
     except KeyboardInterrupt:
         logger.info("\n\nServer stopped by user")
         sys.exit(0)

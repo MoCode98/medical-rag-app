@@ -1,17 +1,14 @@
 name: Build macOS Application
 
 on:
-  # Trigger on push to main branch
+  # Trigger on push to main branch or tags
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
 
   # Allow manual trigger from GitHub Actions tab
   workflow_dispatch:
-
-  # Trigger on new tags (for releases)
-  push:
-    tags:
-      - 'v*'
 
 jobs:
   build-macos:

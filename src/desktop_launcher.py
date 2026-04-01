@@ -259,6 +259,28 @@ class OllamaManager:
 
         return len(missing) == 0, missing
 
+    def get_ollama_command(self) -> str:
+        """
+        Get the Ollama executable path or command.
+
+        Returns:
+            Path to ollama executable or "ollama" command
+        """
+        system = platform.system()
+
+        if system == "Windows":
+            # Check common Windows paths
+            paths = [
+                Path(os.getenv("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe",
+                Path(os.getenv("PROGRAMFILES", "")) / "Ollama" / "ollama.exe",
+            ]
+            for path in paths:
+                if path.exists():
+                    return str(path)
+
+        # Default to command in PATH
+        return "ollama"
+
     def pull_model(self, model_name: str, callback=None) -> bool:
         """
         Pull/download an Ollama model.
@@ -275,15 +297,17 @@ class OllamaManager:
         print("This may take a few minutes...")
 
         try:
-            # Use ollama CLI to pull model
-            system = platform.system()
-            cmd = ["ollama", "pull", model_name]
+            # Get ollama command/path
+            ollama_cmd = self.get_ollama_command()
+            cmd = [ollama_cmd, "pull", model_name]
 
+            # Use UTF-8 encoding on Windows to handle special characters
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
+                encoding='utf-8',
+                errors='replace',  # Replace invalid chars instead of crashing
                 bufsize=1,
             )
 

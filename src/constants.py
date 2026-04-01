@@ -7,7 +7,7 @@ DEFAULT_COLLECTION_NAME = "medical-research-chunks"
 
 # Model Names
 DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
-DEFAULT_LLM_MODEL = "deepseek-chat:7b"
+DEFAULT_LLM_MODEL = "deepseek-llm:7b-chat"
 
 # Chunking
 DEFAULT_CHUNK_SIZE = 1000

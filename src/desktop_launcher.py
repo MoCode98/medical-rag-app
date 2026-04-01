@@ -311,11 +311,15 @@ class OllamaManager:
                 bufsize=1,
             )
 
+            # Collect output for error reporting
+            all_output = []
+
             # Stream output
             if process.stdout:
                 for line in process.stdout:
                     line = line.strip()
                     if line:
+                        all_output.append(line)
                         print(line)
                         if callback:
                             callback(line)
@@ -327,12 +331,20 @@ class OllamaManager:
                 print(f"✓ Model {model_name} downloaded successfully\n")
                 return True
             else:
-                logger.error(f"Failed to pull model: {model_name}")
-                print(f"✗ Failed to download model: {model_name}\n")
+                # Show the actual error from Ollama
+                error_output = '\n'.join(all_output[-15:]) if all_output else "No output captured"
+                logger.error(f"Failed to pull model {model_name}. Return code: {process.returncode}")
+                logger.error(f"Ollama output:\n{error_output}")
+                print(f"\n✗ Failed to download model: {model_name}")
+                print(f"Return code: {process.returncode}")
+                print(f"\nLast output from Ollama:")
+                print(error_output)
+                print()
                 return False
 
         except Exception as e:
             logger.error(f"Error pulling model: {e}")
+            logger.exception("Full traceback:")
             print(f"✗ Error: {e}\n")
             return False
 

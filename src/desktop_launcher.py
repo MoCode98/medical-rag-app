@@ -396,7 +396,7 @@ class DesktopLauncher:
         """Initialize desktop launcher."""
         self.user_data = get_user_data_manager()
         self.ollama = OllamaManager()
-        self.required_models = ["deepseek-r1:1.5b", "nomic-embed-text"]
+        self.required_models = ["deepseek-chat:7b", "nomic-embed-text"]
 
     def copy_bundled_pdfs(self) -> int:
         """

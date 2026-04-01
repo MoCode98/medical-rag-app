@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # Ollama Configuration
     ollama_base_url: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
-    ollama_model: str = Field(default="deepseek-r1:1.5b", env="OLLAMA_MODEL")
+    ollama_model: str = Field(default="deepseek-chat:7b", env="OLLAMA_MODEL")
     ollama_embedding_model: str = Field(default="nomic-embed-text", env="OLLAMA_EMBEDDING_MODEL")
 
     # Vector Database Configuration

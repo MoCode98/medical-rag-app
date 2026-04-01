@@ -259,6 +259,13 @@ async def startup_event():
         # Desktop mode: wait for ingestion to complete before opening browser
         logger.info("Starting auto-ingestion (will open browser when complete)...")
         await run_auto_ingestion()
+
+        # Ingestion complete - open browser after short delay
+        import asyncio
+        import webbrowser
+        await asyncio.sleep(2)  # Wait for server to be ready
+        logger.info("Opening browser to: http://localhost:8000")
+        webbrowser.open("http://localhost:8000")
     else:
         # Server mode: run in background
         logger.info("Starting background auto-ingestion task...")
@@ -322,38 +329,11 @@ def run_desktop():
     logger.info("  • UI:  http://localhost:8000")
     logger.info("  • API: http://localhost:8000/docs")
     logger.info("")
-    logger.info("The application will open in your browser shortly...")
+    logger.info("Browser will open automatically after PDF ingestion completes...")
     logger.info("Press CTRL+C to stop")
     logger.info("=" * 80)
 
-    # Open browser after ingestion completes
-    import threading
-
-    def delayed_browser():
-        import time
-        # Wait for server to start
-        time.sleep(3)
-
-        # Wait for auto-ingestion to complete
-        max_wait = 300  # Maximum 5 minutes
-        waited = 0
-        while waited < max_wait:
-            if auto_ingestion_status.get("complete", False):
-                # Ingestion complete
-                num_files = auto_ingestion_status.get("files_processed", 0)
-                if num_files > 0:
-                    logger.info(f"Auto-ingestion complete: {num_files} PDF(s) processed")
-                break
-            time.sleep(1)
-            waited += 1
-
-        # Open browser
-        launcher.open_browser()
-
-    browser_thread = threading.Thread(target=delayed_browser, daemon=True)
-    browser_thread.start()
-
-    # Run server
+    # Run server (browser will open in startup_event after ingestion)
     uvicorn.run(
         app,
         host="127.0.0.1",  # Desktop mode: only localhost

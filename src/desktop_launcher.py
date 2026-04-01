@@ -398,6 +398,53 @@ class DesktopLauncher:
         self.ollama = OllamaManager()
         self.required_models = ["deepseek-r1:1.5b", "nomic-embed-text"]
 
+    def copy_bundled_pdfs(self) -> int:
+        """
+        Copy bundled PDFs to user data directory if they don't exist there.
+
+        Returns:
+            Number of PDFs copied
+        """
+        import shutil
+
+        # Get bundled PDFs directory (in the executable)
+        if getattr(sys, 'frozen', False):
+            # Running as bundled executable
+            bundle_dir = Path(sys._MEIPASS)  # PyInstaller temp directory
+        else:
+            # Running in development
+            bundle_dir = Path.cwd()
+
+        bundled_pdfs_dir = bundle_dir / "pdfs"
+        user_pdfs_dir = self.user_data.get_pdfs_dir()
+
+        if not bundled_pdfs_dir.exists():
+            logger.debug("No bundled PDFs directory found")
+            return 0
+
+        # Get list of bundled PDFs
+        bundled_pdfs = list(bundled_pdfs_dir.glob("*.pdf"))
+        if not bundled_pdfs:
+            logger.debug("No PDFs found in bundle")
+            return 0
+
+        # Copy PDFs that don't already exist in user directory
+        copied = 0
+        for pdf_file in bundled_pdfs:
+            dest_file = user_pdfs_dir / pdf_file.name
+            if not dest_file.exists():
+                try:
+                    shutil.copy2(pdf_file, dest_file)
+                    logger.info(f"Copied bundled PDF: {pdf_file.name}")
+                    copied += 1
+                except Exception as e:
+                    logger.error(f"Failed to copy {pdf_file.name}: {e}")
+
+        if copied > 0:
+            logger.info(f"Copied {copied} bundled PDF(s) to user data directory")
+
+        return copied
+
     def check_prerequisites(self) -> bool:
         """
         Check if all prerequisites are met.

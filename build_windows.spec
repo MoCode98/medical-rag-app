@@ -54,6 +54,7 @@ datas = [
     ('src', 'src'),  # Source code (for imports)
     ('api', 'api'),  # API modules
     ('.env.example', '.'),  # Example config
+    ('pdfs', 'pdfs'),  # Bundle PDFs for distribution
 ]
 
 # Collect data files from packages

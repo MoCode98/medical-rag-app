@@ -304,6 +304,11 @@ def run_desktop():
         logger.error("Prerequisites not met. Exiting.")
         sys.exit(1)
 
+    # Copy bundled PDFs to user data directory (first run)
+    copied = launcher.copy_bundled_pdfs()
+    if copied > 0:
+        print(f"\n✓ Copied {copied} bundled PDF(s) to user data directory\n")
+
     # Show storage info
     info = launcher.user_data.get_storage_info()
     logger.info(f"User data directory: {info['base_directory']}")

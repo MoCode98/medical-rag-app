@@ -348,6 +348,40 @@ class OllamaManager:
             print(f"✗ Error: {e}\n")
             return False
 
+    def test_connection(self) -> bool:
+        """
+        Test if Ollama is responding to commands.
+
+        Returns:
+            True if Ollama responds, False otherwise
+        """
+        try:
+            ollama_cmd = self.get_ollama_command()
+            result = subprocess.run(
+                [ollama_cmd, "list"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                encoding='utf-8',
+                errors='replace',
+            )
+
+            if result.returncode == 0:
+                logger.info("Ollama connection test successful")
+                return True
+            else:
+                logger.error(f"Ollama list command failed with return code {result.returncode}")
+                logger.error(f"Output: {result.stdout}")
+                logger.error(f"Error: {result.stderr}")
+                return False
+
+        except subprocess.TimeoutExpired:
+            logger.error("Ollama connection test timed out")
+            return False
+        except Exception as e:
+            logger.error(f"Ollama connection test failed: {e}")
+            return False
+
     def start_service(self) -> bool:
         """
         Attempt to start Ollama service.
@@ -562,11 +596,24 @@ class DesktopLauncher:
             True if all models downloaded successfully
         """
         print("\n  Downloading missing models...")
+
+        # Test Ollama connection first
+        print("  Testing Ollama connection... ", end="")
+        if not self.ollama.test_connection():
+            print("✗ FAILED")
+            print("\n  ✗ Cannot connect to Ollama")
+            print("    Please ensure Ollama is running and try again.")
+            return False
+        print("✓ OK")
+
         for model in missing_models:
             print(f"\n  Downloading: {model}")
             if not self.ollama.pull_model(model):
                 print(f"\n  ✗ Failed to download {model}")
-                print("    Please check your internet connection and try again.")
+                print("    Please check:")
+                print("      - Model name is correct")
+                print("      - Internet connection is working")
+                print("      - Sufficient disk space available")
                 return False
 
         return True

@@ -15,6 +15,7 @@ VERSION = '1.0.0'
 
 # Collect all submodules
 hiddenimports = [
+    # Uvicorn
     'uvicorn.logging',
     'uvicorn.loops',
     'uvicorn.loops.auto',
@@ -25,6 +26,23 @@ hiddenimports = [
     'uvicorn.protocols.websockets.auto',
     'uvicorn.lifespan',
     'uvicorn.lifespan.on',
+    # App modules
+    'src.user_data',
+    'src.desktop_launcher',
+    'src.config',
+    'src.constants',
+    'src.logger',
+    'src.pdf_parser',
+    'src.chunker',
+    'src.vector_db',
+    'src.ingestion_progress',
+    'src.rag_engine',
+    # API modules
+    'api.ingest',
+    'api.query',
+    # Additional dependencies
+    'pymupdf4llm',
+    'ollama',
 ] + collect_submodules('chromadb') + collect_submodules('fastapi') + collect_submodules('pydantic')
 
 # Collect data files
@@ -78,7 +96,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,  # No console window
+    console=True,  # Enable console for error messages
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

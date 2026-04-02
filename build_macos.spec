@@ -16,6 +16,7 @@ VERSION = '1.0.0'
 # Collect all submodules
 hiddenimports = [
     # Uvicorn
+    'uvicorn',
     'uvicorn.logging',
     'uvicorn.loops',
     'uvicorn.loops.auto',
@@ -26,7 +27,21 @@ hiddenimports = [
     'uvicorn.protocols.websockets.auto',
     'uvicorn.lifespan',
     'uvicorn.lifespan.on',
+    # FastAPI
+    'fastapi',
+    'fastapi.routing',
+    'fastapi.responses',
+    'fastapi.staticfiles',
+    'starlette',
+    'starlette.routing',
+    'starlette.middleware',
+    'starlette.middleware.cors',
+    # Pydantic
+    'pydantic',
+    'pydantic.fields',
+    'pydantic_settings',
     # App modules
+    'src',
     'src.user_data',
     'src.desktop_launcher',
     'src.config',
@@ -38,12 +53,16 @@ hiddenimports = [
     'src.ingestion_progress',
     'src.rag_engine',
     # API modules
+    'api',
     'api.ingest',
     'api.query',
     # Additional dependencies
     'pymupdf4llm',
     'ollama',
-] + collect_submodules('chromadb') + collect_submodules('fastapi') + collect_submodules('pydantic')
+    'httpx',
+    'dotenv',
+    'python_dotenv',
+] + collect_submodules('chromadb') + collect_submodules('fastapi') + collect_submodules('starlette') + collect_submodules('pydantic') + collect_submodules('pydantic_core')
 
 # Collect data files
 datas = [

@@ -24,7 +24,32 @@ class UserDataManager:
         """
         self.app_name = app_name
         self._base_dir: Optional[Path] = None
+        self._is_docker_mode: bool = self._check_docker_mode()
         self._is_dev_mode: bool = self._check_dev_mode()
+
+    def _check_docker_mode(self) -> bool:
+        """
+        Check if running in Docker container.
+
+        Returns:
+            True if in Docker, False otherwise
+        """
+        # Check for .dockerenv file
+        if os.path.exists('/.dockerenv'):
+            return True
+
+        # Check for DOCKER_CONTAINER environment variable
+        if os.getenv('DOCKER_CONTAINER', '').lower() in ('true', '1', 'yes'):
+            return True
+
+        # Check cgroup for docker
+        try:
+            with open('/proc/1/cgroup', 'rt') as f:
+                return 'docker' in f.read()
+        except Exception:
+            pass
+
+        return False
 
     def _check_dev_mode(self) -> bool:
         """
@@ -41,6 +66,7 @@ class UserDataManager:
         """
         Get the base user data directory.
 
+        In Docker: Uses /app directory
         In development: Uses current working directory
         In production: Uses platform-specific app data directory
 
@@ -50,7 +76,11 @@ class UserDataManager:
         if self._base_dir:
             return self._base_dir
 
-        if self._is_dev_mode:
+        if self._is_docker_mode:
+            # Docker mode: use /app directory
+            self._base_dir = Path("/app")
+            logger.info(f"Running in Docker mode, using: {self._base_dir}")
+        elif self._is_dev_mode:
             # Development mode: use current directory
             self._base_dir = Path.cwd()
             logger.info(f"Running in development mode, using: {self._base_dir}")

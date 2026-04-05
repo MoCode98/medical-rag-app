@@ -117,20 +117,29 @@ Run the complete system using Docker with a single command - perfect for Windows
 # Start everything (Ollama + RAG App)
 docker compose up -d
 
-# Download AI models (one-time setup)
-docker compose exec ollama ollama pull nomic-embed-text
-docker compose exec ollama ollama pull deepseek-r1:1.5b
+# Wait for initialization (first run: ~10-15 minutes)
+# - Downloads AI models automatically (~4-5 GB)
+# - Ingests bundled PDFs automatically
+# - Models: deepseek-llm:7b-chat, nomic-embed-text
 
 # Access the Web UI
 # Open http://localhost:8000 in your browser
 ```
 
+**Note**: On first run, the application automatically:
+1. Downloads required AI models (~10 minutes)
+2. Ingests bundled medical research PDFs (~2-5 minutes)
+3. Starts the web interface
+
+Subsequent runs start in ~10-30 seconds.
+
 ### What You Get
 
 - **Complete Stack**: Ollama and RAG application in isolated containers
-- **Cross-Platform**: Works on Windows, macOS, and Linux (built for `linux/amd64`)
-- **Persistent Data**: Vector database, caches, and models persist between restarts
-- **Auto-Ingestion**: Drop PDFs in `./pdfs/` folder for automatic processing on startup
+- **Cross-Platform**: Works on Windows (WSL 2), macOS, and Linux
+- **Persistent Data**: Vector database, models, and caches persist between restarts
+- **Auto-Setup**: Models download and PDFs ingest automatically on first run
+- **Auto-Ingestion**: Drop PDFs in `./pdfs/` folder for automatic processing
 
 ### Docker Commands
 
@@ -138,8 +147,12 @@ docker compose exec ollama ollama pull deepseek-r1:1.5b
 # Start services
 docker compose up -d
 
-# View logs
-docker compose logs -f rag-app
+# View logs (all services)
+docker compose logs -f
+
+# View logs (specific service)
+docker compose logs -f medical-rag
+docker compose logs -f ollama
 
 # Stop (preserves data)
 docker compose stop
@@ -147,18 +160,26 @@ docker compose stop
 # Stop and remove containers (volumes remain)
 docker compose down
 
-# Complete cleanup (⚠️ DELETES ALL DATA)
+# Complete cleanup (⚠️ DELETES ALL DATA including models)
 docker compose down -v
 
 # Restart a service
-docker compose restart rag-app
+docker compose restart medical-rag
 ```
 
 ### Requirements
 
 - **Docker Desktop** (Windows/Mac) or **Docker Engine** (Linux)
-- **20GB** free disk space (for Docker images + AI models)
-- **8GB RAM** minimum (16GB recommended)
+  - Windows: Requires WSL 2
+  - macOS: Docker Desktop 4.0+
+  - Linux: Docker Engine 20.10+
+- **20GB** free disk space:
+  - ~5 GB for Docker images
+  - ~4-5 GB per AI model
+  - ~2 GB for vector database
+  - ~5 GB for PDFs and logs
+- **8GB RAM** minimum (16GB recommended for better performance)
+- **4 CPU cores** recommended (2 minimum)
 
 ### Volume Mounts
 
@@ -166,27 +187,71 @@ docker compose restart rag-app
 - `./logs` → `/app/logs` - Application logs
 - `vector_db` (named volume) - ChromaDB database (persistent)
 - `data_cache` (named volume) - Embedding cache (persistent)
-- `ollama_data` (named volume) - Ollama models (persistent)
+- `ollama_data` (named volume) - Ollama models (~4-5 GB, persistent)
 
 ### Environment Configuration
 
-Edit `docker-compose.yml` to customize:
+Create a `.env` file or edit `docker-compose.yml` to customize:
 
 ```yaml
 environment:
-  - OLLAMA_MODEL=deepseek-r1:1.5b      # Change AI model
-  - OLLAMA_EMBEDDING_MODEL=nomic-embed-text
-  - CHUNK_SIZE=512                      # Chunking parameters
-  - TOP_K_RESULTS=5                     # Retrieval settings
-  - TEMPERATURE=0.7                     # AI creativity
+  # AI Model Configuration
+  - OLLAMA_MODEL=deepseek-llm:7b-chat          # LLM model
+  - OLLAMA_EMBEDDING_MODEL=nomic-embed-text    # Embedding model
+
+  # Chunking Configuration
+  - CHUNK_SIZE=1000                             # Token chunk size
+  - CHUNK_OVERLAP=200                           # Overlap between chunks
+
+  # Retrieval Configuration
+  - TOP_K=5                                     # Number of results
+  - SIMILARITY_THRESHOLD=0.7                    # Minimum similarity
+
+  # Paths (usually don't need to change)
+  - PDF_FOLDER=/app/pdfs
+  - VECTOR_DB_PATH=/app/vector_db
+  - DATA_FOLDER=/app/data
 ```
+
+### Adding Your Own PDFs
+
+**Option 1: Before starting (Recommended)**
+```bash
+# Copy PDFs to pdfs folder
+cp /path/to/your/papers/*.pdf ./pdfs/
+
+# Start Docker (auto-ingests on startup)
+docker compose up -d
+```
+
+**Option 2: While running**
+```bash
+# Upload via web interface at http://localhost:8000
+# Or copy and restart:
+cp /path/to/your/papers/*.pdf ./pdfs/
+docker compose restart medical-rag
+```
+
+### Performance Notes
+
+**Expected Performance**:
+- First query: 5-15 seconds (model warm-up)
+- Subsequent queries: 2-5 seconds
+- PDF ingestion: ~30-60 seconds per PDF
+
+**Docker vs Native**:
+- Docker has slightly higher overhead (~10-20% slower)
+- Use Docker for servers, multi-user, or cloud hosting
+- Use native .exe/.app for single-user desktops
 
 ### Windows Users
 
-See [DOCKER_SETUP.md](DOCKER_SETUP.md) for a complete step-by-step guide including:
-- Docker Desktop installation
-- Troubleshooting common issues
-- Performance optimization
+See [DOCKER_SETUP_WINDOWS.md](DOCKER_SETUP_WINDOWS.md) for a complete step-by-step guide including:
+- WSL 2 installation
+- Docker Desktop setup
+- Troubleshooting common Windows issues
+- Performance optimization tips
+- GPU support configuration
 - Backup and restore procedures
 
 ## Web UI Features

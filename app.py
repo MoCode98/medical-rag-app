@@ -17,6 +17,7 @@ Then open http://localhost:8000 in your browser.
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -37,8 +38,35 @@ from src.config import settings
 from src.logging_config import get_logger, setup_logging
 from src.user_data import get_user_data_manager
 
-# Desktop mode flag
+
+def is_running_in_docker() -> bool:
+    """
+    Detect if the application is running inside a Docker container.
+
+    Returns:
+        True if running in Docker, False otherwise
+    """
+    # Check for .dockerenv file (created by Docker)
+    if os.path.exists('/.dockerenv'):
+        return True
+
+    # Check for DOCKER_CONTAINER environment variable
+    if os.getenv('DOCKER_CONTAINER', '').lower() in ('true', '1', 'yes'):
+        return True
+
+    # Check cgroup for docker
+    try:
+        with open('/proc/1/cgroup', 'rt') as f:
+            return 'docker' in f.read()
+    except Exception:
+        pass
+
+    return False
+
+
+# Mode flags
 IS_DESKTOP_MODE = False
+IS_DOCKER_MODE = is_running_in_docker()
 
 # Global state for auto-ingestion
 auto_ingestion_status = {
@@ -52,6 +80,11 @@ auto_ingestion_status = {
 # Setup logging
 setup_logging(log_level="INFO", log_file=Path(settings.log_file), log_to_console=True)
 logger = get_logger()
+
+# Log running mode
+if IS_DOCKER_MODE:
+    logger.info("Running in Docker container mode")
+    logger.info(f"Using Docker paths: {os.getenv('PDF_FOLDER', '/app/pdfs')}, {os.getenv('VECTOR_DB_PATH', '/app/vector_db')}")
 
 # Initialize rate limiter
 limiter = Limiter(
@@ -354,7 +387,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     try:
-        if args.desktop:
+        # Docker mode is auto-detected and runs like main() with Docker paths
+        if IS_DOCKER_MODE:
+            logger.info("Starting in Docker container mode...")
+            main()
+        elif args.desktop:
             run_desktop()
         else:
             main()

@@ -156,7 +156,13 @@ async def root():
 # Health check
 @app.get("/health")
 async def health():
-    """API health check."""
+    """API health check. Returns 503 while auto-ingestion is still running."""
+    if auto_ingestion_status.get("running") and not auto_ingestion_status.get("complete"):
+        return JSONResponse(
+            status_code=503,
+            content={"status": "starting", "service": "Medical Research RAG",
+                     "message": auto_ingestion_status.get("message", "Ingesting...")}
+        )
     return {"status": "healthy", "service": "Medical Research RAG"}
 
 

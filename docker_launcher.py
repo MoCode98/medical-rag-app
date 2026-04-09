@@ -152,25 +152,44 @@ def run_docker_compose(app_dir):
         sys.exit(1)
 
 
-def get_container_log():
-    """Get the latest log line from the app container."""
+def format_log_line(line):
+    """Clean up a container log line for display."""
+    line = line.strip()
+    if not line:
+        return None
+    # Remove timestamp prefix (e.g. "2026-04-09 12:00:00,123 - medical_rag - INFO - ")
+    if " - medical_rag - " in line:
+        line = line.split(" - medical_rag - ", 1)[-1]
+        # Remove log level prefix
+        for prefix in ("INFO - ", "WARNING - ", "ERROR - "):
+            if line.startswith(prefix):
+                line = line[len(prefix):]
+                break
+    # Skip noisy/irrelevant lines
+    skip_patterns = ["GET /", "POST /", "HTTP/1.1", "Loaded progress:", "uvicorn", "Application startup"]
+    if any(p in line for p in skip_patterns):
+        return None
+    return line[:120] if line else None
+
+
+def get_container_logs(since_seconds=6):
+    """Get recent log lines from the app container."""
     try:
         result = subprocess.run(
-            ["docker", "logs", CONTAINER_NAME, "--tail", "1"],
+            ["docker", "logs", CONTAINER_NAME, "--since", f"{since_seconds}s"],
             capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
-            line = result.stdout.strip() or result.stderr.strip()
-            if line:
-                # Trim timestamp prefix if present
-                if " - medical_rag - " in line:
-                    line = line.split(" - medical_rag - ", 1)[-1]
-                elif " - " in line[:30]:
-                    line = line.split(" - ", 2)[-1] if line.count(" - ") >= 2 else line
-                return line[:100]
+            text = result.stdout + result.stderr
+            lines = []
+            for raw in text.strip().split("\n"):
+                cleaned = format_log_line(raw)
+                if cleaned:
+                    lines.append(cleaned)
+            return lines
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
-    return None
+    return []
 
 
 def check_health():
@@ -179,7 +198,11 @@ def check_health():
         req = urllib.request.Request(HEALTH_URL, method="GET")
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status == 200
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError, ValueError):
+    except urllib.error.HTTPError:
+        # 503 = still ingesting, not an error to show
+        return False
+    except (urllib.error.URLError, OSError, ValueError):
+        # Connection refused = containers still starting
         return False
 
 
@@ -188,17 +211,21 @@ def wait_for_ready():
     print("[Step 2/3] Waiting for application to be ready...")
     print()
 
-    last_msg = ""
+    shown = set()
     while True:
         if check_health():
             return
 
-        log = get_container_log()
-        if log and log != last_msg:
-            print(f"  {log}")
-            last_msg = log
+        # Show new log lines from the container
+        for line in get_container_logs():
+            if line not in shown:
+                print(f"  {line}")
+                shown.add(line)
+                # Keep the set from growing forever
+                if len(shown) > 500:
+                    shown = set(list(shown)[-200:])
 
-        time.sleep(4)
+        time.sleep(5)
 
 
 def open_browser():

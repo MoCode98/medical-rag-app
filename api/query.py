@@ -2,6 +2,7 @@
 Query API endpoints for RAG queries.
 """
 
+import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -10,9 +11,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from src.config import settings
+from src.conversational_rag import ConversationalRAG
 from src.logging_config import get_logger
 from src.metrics import get_metrics
-from src.rag_pipeline import MedicalRAG
 from src.validation import (
     ValidationError,
     validate_model_name,
@@ -28,32 +29,55 @@ logger = get_logger()
 # Initialize limiter for this router
 limiter = Limiter(key_func=get_remote_address)
 
-# Global RAG instance (lazy loaded)
-_rag_instance: MedicalRAG | None = None
+# Session-based ConversationalRAG instances
+_sessions: dict[str, dict[str, Any]] = {}
+MAX_SESSIONS = 50
+SESSION_TTL = 3600 * 4  # 4 hours
 
 
-def get_rag() -> MedicalRAG:
-    """Get or create RAG instance."""
-    global _rag_instance
-    if _rag_instance is None:
-        try:
-            vector_db = VectorDatabase()
-            stats = vector_db.get_collection_stats()
+def _cleanup_sessions() -> None:
+    """Remove expired sessions."""
+    now = time.time()
+    expired = [sid for sid, s in _sessions.items() if now - s["last_used"] > SESSION_TTL]
+    for sid in expired:
+        del _sessions[sid]
+        logger.info(f"Expired session: {sid}")
 
-            if stats["total_chunks"] == 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Vector database is empty. Please ingest documents first."
-                )
 
-            _rag_instance = MedicalRAG(vector_db=vector_db)
-            logger.info(f"RAG initialized with {stats['total_chunks']} chunks")
+def get_rag(session_id: str = "default") -> ConversationalRAG:
+    """Get or create a ConversationalRAG instance for the given session."""
+    _cleanup_sessions()
 
-        except Exception as e:
-            logger.error(f"Failed to initialize RAG: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to initialize RAG: {str(e)}")
+    if session_id in _sessions:
+        _sessions[session_id]["last_used"] = time.time()
+        return _sessions[session_id]["rag"]
 
-    return _rag_instance
+    try:
+        vector_db = VectorDatabase()
+        stats = vector_db.get_collection_stats()
+
+        if stats["total_chunks"] == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Vector database is empty. Please ingest documents first."
+            )
+
+        # Enforce max sessions
+        if len(_sessions) >= MAX_SESSIONS:
+            oldest = min(_sessions, key=lambda k: _sessions[k]["last_used"])
+            del _sessions[oldest]
+            logger.info(f"Evicted oldest session: {oldest}")
+
+        rag = ConversationalRAG(vector_db=vector_db)
+        _sessions[session_id] = {"rag": rag, "last_used": time.time()}
+        logger.info(f"Created session '{session_id}' with {stats['total_chunks']} chunks")
+        return rag
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to initialize RAG: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to initialize RAG: {str(e)}")
 
 
 class QueryRequest(BaseModel):
@@ -63,6 +87,7 @@ class QueryRequest(BaseModel):
     model: str | None = None
     temperature: float | None = None
     return_context: bool = False
+    session_id: str = "default"
 
 
 class QueryResponse(BaseModel):
@@ -79,10 +104,10 @@ class QueryResponse(BaseModel):
 @limiter.limit(f"{settings.rate_limit_per_minute}/minute")
 async def query_rag(request: Request, query_request: QueryRequest) -> QueryResponse:
     """
-    Submit a query to the RAG system.
+    Submit a query to the RAG system with conversation memory.
 
     Args:
-        query_request: Query request with question and parameters
+        query_request: Query request with question, parameters, and session_id
 
     Returns:
         Query response with answer and sources
@@ -94,8 +119,8 @@ async def query_rag(request: Request, query_request: QueryRequest) -> QueryRespo
         question = validate_query(query_request.question)
         top_k = validate_top_k(query_request.top_k, max_value=settings.top_k_results * 2)
 
-        # Get RAG instance
-        rag = get_rag()
+        # Get session-specific RAG instance
+        rag = get_rag(query_request.session_id)
 
         # Override model/temperature if specified (with validation)
         if query_request.model:
@@ -103,7 +128,7 @@ async def query_rag(request: Request, query_request: QueryRequest) -> QueryRespo
         if query_request.temperature is not None:
             rag.temperature = validate_temperature(query_request.temperature)
 
-        # Execute query
+        # Execute query (ConversationalRAG automatically uses conversation memory)
         metrics.start_timer("api_query")
         response = rag.query(
             question=question,
@@ -112,7 +137,7 @@ async def query_rag(request: Request, query_request: QueryRequest) -> QueryRespo
         )
         query_time = metrics.stop_timer("api_query")
 
-        logger.info(f"Query processed in {query_time:.2f}s: {question[:50]}...")
+        logger.info(f"Query processed in {query_time:.2f}s (session={query_request.session_id}): {question[:50]}...")
 
         return QueryResponse(
             question=response.question,
@@ -165,13 +190,61 @@ async def get_available_models() -> dict[str, Any]:
 @router.post("/reset")
 async def reset_rag() -> dict[str, Any]:
     """
-    Reset the RAG instance (force reload).
+    Reset all RAG sessions (force reload).
 
     Returns:
         Status message
     """
-    global _rag_instance
-    _rag_instance = None
-    logger.info("RAG instance reset")
+    global _sessions
+    count = len(_sessions)
+    _sessions = {}
+    logger.info(f"All RAG sessions reset ({count} cleared)")
 
-    return {"success": True, "message": "RAG instance reset successfully"}
+    return {"success": True, "message": f"All RAG sessions reset ({count} cleared)"}
+
+
+@router.post("/conversation/clear")
+async def clear_conversation(session_id: str = "default") -> dict[str, Any]:
+    """
+    Clear conversation history for a session while keeping the RAG instance.
+
+    Args:
+        session_id: Session to clear
+
+    Returns:
+        Status message
+    """
+    if session_id in _sessions:
+        _sessions[session_id]["rag"].clear_conversation()
+        logger.info(f"Conversation cleared for session: {session_id}")
+        return {"success": True, "message": "Conversation history cleared"}
+    else:
+        return {"success": True, "message": "No active session to clear"}
+
+
+@router.get("/conversation/history")
+async def get_conversation_history(session_id: str = "default") -> dict[str, Any]:
+    """
+    Get conversation history for a session.
+
+    Args:
+        session_id: Session to query
+
+    Returns:
+        Conversation history
+    """
+    if session_id in _sessions:
+        history = _sessions[session_id]["rag"].get_conversation_history()
+        return {
+            "success": True,
+            "session_id": session_id,
+            "turns": len(history),
+            "history": history
+        }
+    else:
+        return {
+            "success": True,
+            "session_id": session_id,
+            "turns": 0,
+            "history": []
+        }

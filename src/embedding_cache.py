@@ -3,6 +3,7 @@ Persistent cache for embeddings to avoid recomputing identical texts.
 """
 
 import hashlib
+import json
 import pickle
 from pathlib import Path
 from typing import Any
@@ -26,10 +27,29 @@ class EmbeddingCache:
         # In-memory cache for faster access during session
         self.memory_cache: dict[str, list[float]] = {}
 
-        # Load statistics
-        self.stats = {"hits": 0, "misses": 0, "saves": 0}
+        # Load statistics from disk (persist across instances)
+        self._stats_file = self.cache_dir / "cache_stats.json"
+        self.stats = self._load_stats()
 
         logger.info(f"Initialized embedding cache at {self.cache_dir}")
+
+    def _load_stats(self) -> dict[str, int]:
+        """Load stats from disk, or return defaults."""
+        try:
+            if self._stats_file.exists():
+                with open(self._stats_file) as f:
+                    return json.load(f)
+        except Exception:
+            pass
+        return {"hits": 0, "misses": 0, "saves": 0}
+
+    def _save_stats(self) -> None:
+        """Persist stats to disk."""
+        try:
+            with open(self._stats_file, "w") as f:
+                json.dump(self.stats, f)
+        except Exception:
+            pass
 
     def _get_cache_key(self, text: str, model: str) -> str:
         """
@@ -78,6 +98,7 @@ class EmbeddingCache:
         # Check memory cache first
         if cache_key in self.memory_cache:
             self.stats["hits"] += 1
+            self._save_stats()
             return self.memory_cache[cache_key]
 
         # Check disk cache
@@ -100,6 +121,7 @@ class EmbeddingCache:
                 cache_path.unlink(missing_ok=True)
 
         self.stats["misses"] += 1
+        self._save_stats()
         return None
 
     def set(self, text: str, model: str, embedding: list[float]) -> None:
@@ -124,6 +146,7 @@ class EmbeddingCache:
                 pickle.dump(embedding, f)
 
             self.stats["saves"] += 1
+            self._save_stats()
 
         except Exception as e:
             logger.warning(f"Failed to save cache entry {cache_key}: {e}")
@@ -178,6 +201,7 @@ class EmbeddingCache:
 
             logger.info("Cache cleared")
             self.stats = {"hits": 0, "misses": 0, "saves": 0}
+            self._save_stats()
 
         except Exception as e:
             logger.error(f"Failed to clear cache: {e}")
@@ -189,6 +213,8 @@ class EmbeddingCache:
         Returns:
             Dictionary with hits, misses, and saves counts
         """
+        # Re-read from disk to get latest stats (may have been updated by another instance)
+        self.stats = self._load_stats()
         total = self.stats["hits"] + self.stats["misses"]
         hit_rate = (self.stats["hits"] / total * 100) if total > 0 else 0.0
 

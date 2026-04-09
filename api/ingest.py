@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
 from src.chunker import IntelligentChunker
 from src.config import settings
@@ -218,18 +219,18 @@ async def run_ingestion_pipeline(websocket: WebSocket, reset: bool = False):
 
             if doc:
                 documents.append(doc)
-                progress.mark_processed(str(pdf_file))
+                progress.mark_processed(pdf_file.name)  # Use just filename, not full path
                 await websocket.send_json({
                     "type": "log",
                     "message": f"✓ Completed: {pdf_file.name}",
                     "progress": 30 + int((idx + 1) / total_files * 20)
                 })
             else:
-                progress.mark_failed(str(pdf_file), "No content extracted")
+                progress.mark_failed(pdf_file.name, "No content extracted")  # Use just filename
                 await websocket.send_json({"type": "log", "message": f"⚠ No content: {pdf_file.name}"})
 
         except Exception as e:
-            progress.mark_failed(str(pdf_file), str(e))
+            progress.mark_failed(pdf_file.name, str(e))  # Use just filename
             await websocket.send_json({"type": "log", "message": f"✗ Failed: {pdf_file.name} - {e}"})
 
     if not documents:
@@ -287,3 +288,175 @@ async def run_ingestion_pipeline(websocket: WebSocket, reset: bool = False):
 
     metrics.stop_timer("total_ingestion")
     await websocket.send_json({"type": "log", "message": "Ingestion complete!", "progress": 100})
+
+
+@router.delete("/file/{filename:path}")
+async def delete_ingested_file(filename: str, delete_file: bool = False) -> dict[str, Any]:
+    """
+    Delete an ingested PDF file's chunks from the vector database and progress tracking.
+
+    Args:
+        filename: Name of the PDF file to remove
+        delete_file: Whether to also delete the PDF file from disk
+
+    Returns:
+        Deletion result with chunk count
+    """
+    try:
+        # Validate filename
+        if not filename or ".." in filename or "/" in filename:
+            raise HTTPException(status_code=400, detail="Invalid filename")
+
+        logger.info(f"Deleting ingested file: {filename} (delete_file={delete_file})")
+
+        # Remove chunks from vector database
+        vector_db = VectorDatabase()
+        chunks_deleted = vector_db.delete_by_source_file(filename)
+
+        # Remove from ingestion progress tracking
+        progress = IngestionProgress()
+        was_tracked = filename in progress.processed_files
+        progress.processed_files.discard(filename)
+        progress.failed_files.pop(filename, None)
+        progress._save_progress()
+
+        # Only delete the PDF file from disk if requested
+        file_deleted = False
+        if delete_file:
+            pdf_path = Path("pdfs") / filename
+            if pdf_path.exists():
+                pdf_path.unlink()
+                file_deleted = True
+                logger.info(f"Deleted PDF file from disk: {pdf_path}")
+
+        logger.info(
+            f"File removal complete: {filename} "
+            f"(chunks={chunks_deleted}, tracked={was_tracked}, file_deleted={file_deleted})"
+        )
+
+        return {
+            "success": True,
+            "filename": filename,
+            "chunks_deleted": chunks_deleted,
+            "was_tracked": was_tracked,
+            "file_deleted": file_deleted,
+            "message": f"Removed {filename}: {chunks_deleted} chunks deleted"
+                       + (", PDF file deleted from disk" if file_deleted else "")
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete file {filename}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request model for bulk file deletion."""
+    filenames: list[str]
+    delete_files: bool = False
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_files(request: BulkDeleteRequest) -> dict[str, Any]:
+    """
+    Delete multiple ingested files at once.
+
+    Args:
+        request: List of filenames and whether to delete PDFs from disk
+
+    Returns:
+        Summary of deletions
+    """
+    try:
+        vector_db = VectorDatabase()
+        progress = IngestionProgress()
+
+        total_chunks = 0
+        files_deleted = 0
+        results = []
+
+        for filename in request.filenames:
+            if not filename or ".." in filename or "/" in filename:
+                results.append({"file": filename, "error": "Invalid filename"})
+                continue
+
+            chunks = vector_db.delete_by_source_file(filename)
+            total_chunks += chunks
+
+            progress.processed_files.discard(filename)
+            progress.failed_files.pop(filename, None)
+
+            file_deleted = False
+            if request.delete_files:
+                pdf_path = Path("pdfs") / filename
+                if pdf_path.exists():
+                    pdf_path.unlink()
+                    file_deleted = True
+                    files_deleted += 1
+
+            results.append({"file": filename, "chunks": chunks, "file_deleted": file_deleted})
+
+        progress._save_progress()
+
+        logger.info(f"Bulk delete: {len(request.filenames)} files, {total_chunks} chunks removed")
+
+        return {
+            "success": True,
+            "total_files": len(request.filenames),
+            "total_chunks_deleted": total_chunks,
+            "files_deleted_from_disk": files_deleted,
+            "results": results
+        }
+
+    except Exception as e:
+        logger.error(f"Bulk delete failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class BulkReingestRequest(BaseModel):
+    """Request model for bulk re-ingestion."""
+    filenames: list[str]
+
+
+@router.post("/bulk-reingest")
+async def bulk_reingest_files(request: BulkReingestRequest) -> dict[str, Any]:
+    """
+    Mark files for re-ingestion by removing their chunks and progress tracking.
+    Files will be re-ingested on next auto-ingestion cycle or server restart.
+
+    Args:
+        request: List of filenames to re-ingest
+
+    Returns:
+        Summary of files marked for re-ingestion
+    """
+    try:
+        vector_db = VectorDatabase()
+        progress = IngestionProgress()
+
+        total_chunks = 0
+
+        for filename in request.filenames:
+            if not filename or ".." in filename or "/" in filename:
+                continue
+
+            chunks = vector_db.delete_by_source_file(filename)
+            total_chunks += chunks
+            progress.processed_files.discard(filename)
+            progress.failed_files.pop(filename, None)
+
+        progress._save_progress()
+
+        logger.info(f"Bulk re-ingest: {len(request.filenames)} files marked, {total_chunks} old chunks removed")
+
+        return {
+            "success": True,
+            "total_files": len(request.filenames),
+            "total_chunks_removed": total_chunks,
+            "message": f"{len(request.filenames)} file(s) marked for re-ingestion. Restart the server or trigger ingestion to process them."
+        }
+
+    except Exception as e:
+        logger.error(f"Bulk re-ingest failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -27,6 +27,7 @@ COPY api/ ./api/
 COPY static/ ./static/
 COPY app.py .
 COPY .env.example .env
+COPY requirements-prod.txt .
 
 # Copy PDFs (optional - can also be mounted as volume)
 COPY pdfs/ ./pdfs/

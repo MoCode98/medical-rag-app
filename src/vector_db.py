@@ -277,6 +277,130 @@ class VectorDatabase:
 
         return reranked[:top_k]
 
+    def get_chunks_for_file(self, source_file: str) -> list[dict[str, Any]]:
+        """
+        Get all chunks for a specific source file, sorted by chunk_index.
+
+        Args:
+            source_file: The source_file metadata value to match
+
+        Returns:
+            List of chunks with content and metadata
+        """
+        try:
+            results = self.collection.get(
+                where={"source_file": source_file},
+                include=["documents", "metadatas"]
+            )
+
+            chunks = []
+            for i in range(len(results["ids"])):
+                meta = results["metadatas"][i]
+                page_nums = meta.get("page_numbers", "[]")
+                if isinstance(page_nums, str):
+                    try:
+                        page_nums = json.loads(page_nums)
+                    except (json.JSONDecodeError, TypeError):
+                        page_nums = []
+
+                chunks.append({
+                    "id": results["ids"][i],
+                    "content": results["documents"][i],
+                    "chunk_index": meta.get("chunk_index", 0),
+                    "total_chunks": meta.get("total_chunks", 0),
+                    "section_title": meta.get("section_title", "N/A"),
+                    "page_numbers": page_nums,
+                    "token_count": meta.get("token_count", 0),
+                })
+
+            chunks.sort(key=lambda c: c["chunk_index"])
+            return chunks
+
+        except Exception as e:
+            logger.error(f"Error getting chunks for {source_file}: {e}")
+            return []
+
+    def delete_by_source_file(self, source_file: str) -> int:
+        """
+        Delete all chunks belonging to a specific source file.
+
+        Args:
+            source_file: The source_file metadata value to match
+
+        Returns:
+            Number of chunks deleted
+        """
+        try:
+            # Get all chunk IDs matching this source file
+            results = self.collection.get(
+                where={"source_file": source_file},
+                include=[]
+            )
+
+            ids_to_delete = results["ids"]
+            if not ids_to_delete:
+                logger.info(f"No chunks found for source file: {source_file}")
+                return 0
+
+            self.collection.delete(ids=ids_to_delete)
+            logger.info(f"Deleted {len(ids_to_delete)} chunks for file: {source_file}")
+            return len(ids_to_delete)
+
+        except Exception as e:
+            logger.error(f"Error deleting chunks for {source_file}: {e}")
+            raise
+
+    def get_all_files_with_counts(self) -> list[dict[str, Any]]:
+        """
+        Get all ingested files with their chunk counts and metadata.
+
+        Returns:
+            List of dicts sorted by chunk count descending:
+            [{file, chunks, title, pages}, ...]
+        """
+        count = self.collection.count()
+        if count == 0:
+            return []
+
+        try:
+            results = self.collection.get(include=["metadatas"])
+            metadatas = results.get("metadatas", [])
+
+            # Aggregate by source_file
+            files: dict[str, dict[str, Any]] = {}
+            for meta in metadatas:
+                source = meta.get("source_file", "Unknown")
+                if source not in files:
+                    files[source] = {
+                        "file": source,
+                        "title": meta.get("source_title", "Unknown"),
+                        "chunks": 0,
+                        "pages": set(),
+                    }
+                files[source]["chunks"] += 1
+                page_nums = meta.get("page_numbers", "[]")
+                if isinstance(page_nums, str):
+                    try:
+                        page_nums = json.loads(page_nums)
+                    except (json.JSONDecodeError, TypeError):
+                        page_nums = []
+                if isinstance(page_nums, list):
+                    files[source]["pages"].update(page_nums)
+
+            # Convert sets to sorted lists and sort by chunk count
+            result = []
+            for f in files.values():
+                f["pages"] = sorted(f["pages"])
+                f["page_count"] = len(f["pages"])
+                result.append(f)
+
+            result.sort(key=lambda x: x["chunks"], reverse=True)
+            return result
+
+        except Exception as e:
+            logger.error(f"Error getting file counts: {e}")
+            return []
+
     def delete_collection(self) -> None:
         """Delete the entire collection."""
         try:

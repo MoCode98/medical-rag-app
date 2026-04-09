@@ -33,13 +33,12 @@ async def get_all_stats() -> dict[str, Any]:
         progress = IngestionProgress()
         progress_status = progress.get_status()
 
-        # Embedding cache stats
+        # Embedding cache stats (read directly from cache, no need to init OllamaEmbeddings)
         cache_stats = None
         try:
-            from src.embeddings import OllamaEmbeddings
-            embeddings = OllamaEmbeddings()
-            if hasattr(embeddings, "cache") and embeddings.cache:
-                cache_stats = embeddings.cache.get_stats()
+            from src.embedding_cache import EmbeddingCache
+            cache = EmbeddingCache()
+            cache_stats = cache.get_stats()
         except Exception:
             pass
 
@@ -96,6 +95,58 @@ async def get_database_stats() -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/library")
+async def get_document_library() -> dict[str, Any]:
+    """
+    Get all ingested documents with chunk counts.
+
+    Returns:
+        Full document library with per-file chunk statistics
+    """
+    try:
+        vector_db = VectorDatabase()
+        files = vector_db.get_all_files_with_counts()
+        total_chunks = sum(f["chunks"] for f in files)
+
+        return {
+            "success": True,
+            "total_files": len(files),
+            "total_chunks": total_chunks,
+            "files": files
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get document library: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/library/{filename:path}")
+async def get_document_chunks(filename: str) -> dict[str, Any]:
+    """
+    Get all chunks for a specific document.
+
+    Args:
+        filename: Source filename to retrieve chunks for
+
+    Returns:
+        All chunks with content and metadata
+    """
+    try:
+        vector_db = VectorDatabase()
+        chunks = vector_db.get_chunks_for_file(filename)
+
+        return {
+            "success": True,
+            "filename": filename,
+            "total_chunks": len(chunks),
+            "chunks": chunks
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get chunks for {filename}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/cache")
 async def get_cache_stats() -> dict[str, Any]:
     """
@@ -105,29 +156,16 @@ async def get_cache_stats() -> dict[str, Any]:
         Cache statistics
     """
     try:
-        from src.embeddings import OllamaEmbeddings
-        embeddings = OllamaEmbeddings()
+        from src.embedding_cache import EmbeddingCache
+        cache = EmbeddingCache()
+        cache_stats = cache.get_stats()
+        cache_size = cache.get_cache_size()
 
-        if hasattr(embeddings, "cache") and embeddings.cache:
-            cache_stats = embeddings.cache.get_stats()
-            cache_size = embeddings.cache.get_cache_size()
-
-            return {
-                "success": True,
-                "stats": cache_stats,
-                "size": cache_size
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Cache not available",
-                "stats": {
-                    "hits": 0,
-                    "misses": 0,
-                    "hit_rate_percent": 0.0,
-                    "total_requests": 0
-                }
-            }
+        return {
+            "success": True,
+            "stats": cache_stats,
+            "size": cache_size
+        }
 
     except Exception as e:
         logger.error(f"Failed to get cache stats: {e}")

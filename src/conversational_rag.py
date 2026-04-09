@@ -145,6 +145,7 @@ class ConversationalRAG(MedicalRAG):
                     "similarity": chunk.get("similarity", 0.0),
                     "hybrid_score": chunk.get("hybrid_score", None),
                     "rerank_score": chunk.get("rerank_score", None),
+                    "context": chunk.get("content", ""),  # Include context text
                 }
             )
 

@@ -256,6 +256,7 @@ ANSWER (remember to cite sources):"""
                     "section": metadata.get("section_title", "N/A"),
                     "pages": metadata.get("page_numbers", []),
                     "similarity": chunk.get("similarity", 0.0),
+                    "context": chunk.get("content", ""),  # Include context text
                 }
             )
 

@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, File, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -104,13 +104,28 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS middleware for development
+# CORS middleware - restricted to localhost for security
+# For desktop/local deployment, only allow localhost origins
+ALLOWED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost",
+    "http://127.0.0.1",
+]
+
+# Allow Docker internal network if running in container
+if IS_DOCKER_MODE:
+    ALLOWED_ORIGINS.extend([
+        "http://medical-rag:8000",
+        "http://rag-app:8000",
+    ])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, restrict this
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Mount API routers
@@ -143,6 +158,193 @@ async def root():
 async def health():
     """API health check."""
     return {"status": "healthy", "service": "Medical Research RAG"}
+
+
+# Runtime settings (overrides for config defaults)
+_runtime_settings = {}
+
+@app.get("/api/settings")
+async def get_settings():
+    """Get current runtime settings with defaults from config."""
+    from src.config import settings as cfg
+    return {
+        "success": True,
+        "settings": {
+            "ollama_model": _runtime_settings.get("ollama_model", cfg.ollama_model),
+            "temperature": _runtime_settings.get("temperature", cfg.temperature),
+            "top_k_results": _runtime_settings.get("top_k_results", cfg.top_k_results),
+            "max_tokens": _runtime_settings.get("max_tokens", cfg.max_tokens),
+            "chunk_size": _runtime_settings.get("chunk_size", cfg.chunk_size),
+            "chunk_overlap": _runtime_settings.get("chunk_overlap", cfg.chunk_overlap),
+            "ollama_base_url": _runtime_settings.get("ollama_base_url", cfg.ollama_base_url),
+            "ollama_embedding_model": cfg.ollama_embedding_model,
+            "max_query_length": _runtime_settings.get("max_query_length", cfg.max_query_length),
+            "rate_limit_per_minute": cfg.rate_limit_per_minute,
+        },
+        "overrides": _runtime_settings
+    }
+
+@app.post("/api/settings")
+async def update_settings(updates: dict):
+    """Update runtime settings. Only whitelisted keys are accepted."""
+    allowed = {
+        "ollama_model": str,
+        "temperature": float,
+        "top_k_results": int,
+        "max_tokens": int,
+        "chunk_size": int,
+        "chunk_overlap": int,
+        "ollama_base_url": str,
+        "max_query_length": int,
+    }
+
+    applied = {}
+    errors = []
+
+    for key, value in updates.items():
+        if key not in allowed:
+            continue
+        try:
+            cast_value = allowed[key](value)
+            # Basic validation
+            if key == "temperature" and not (0.0 <= cast_value <= 2.0):
+                errors.append(f"temperature must be 0-2, got {cast_value}")
+                continue
+            if key == "top_k_results" and not (1 <= cast_value <= 20):
+                errors.append(f"top_k_results must be 1-20, got {cast_value}")
+                continue
+            if key == "max_tokens" and not (256 <= cast_value <= 8192):
+                errors.append(f"max_tokens must be 256-8192, got {cast_value}")
+                continue
+            if key == "chunk_size" and not (100 <= cast_value <= 2048):
+                errors.append(f"chunk_size must be 100-2048, got {cast_value}")
+                continue
+            if key == "chunk_overlap" and not (0 <= cast_value <= 200):
+                errors.append(f"chunk_overlap must be 0-200, got {cast_value}")
+                continue
+
+            _runtime_settings[key] = cast_value
+            applied[key] = cast_value
+        except (ValueError, TypeError) as e:
+            errors.append(f"Invalid value for {key}: {e}")
+
+    return {
+        "success": len(errors) == 0,
+        "applied": applied,
+        "errors": errors
+    }
+
+@app.post("/api/settings/reset")
+async def reset_settings():
+    """Reset all runtime settings to config defaults."""
+    global _runtime_settings
+    _runtime_settings = {}
+    return {"success": True, "message": "All settings reset to defaults"}
+
+
+# Backup/Restore endpoints
+@app.get("/api/backup/download")
+async def download_backup():
+    """Create and download a zip backup of the vector database and ingestion progress."""
+    import shutil
+    import tempfile
+    from src.config import settings as cfg
+
+    db_path = Path(cfg.vector_db_path)
+    progress_file = Path("data/ingestion_progress.json")
+
+    if not db_path.exists():
+        return JSONResponse(status_code=404, content={"error": "Vector database not found"})
+
+    try:
+        # Create temp zip file
+        tmp_dir = tempfile.mkdtemp()
+        zip_base = os.path.join(tmp_dir, "medical_rag_backup")
+        backup_staging = Path(tmp_dir) / "backup_content"
+        backup_staging.mkdir()
+
+        # Copy vector_db directory
+        shutil.copytree(db_path, backup_staging / "vector_db")
+
+        # Copy ingestion progress if it exists
+        if progress_file.exists():
+            (backup_staging / "data").mkdir(exist_ok=True)
+            shutil.copy2(progress_file, backup_staging / "data" / "ingestion_progress.json")
+
+        # Create zip
+        zip_path = shutil.make_archive(zip_base, 'zip', backup_staging)
+
+        return FileResponse(
+            zip_path,
+            media_type="application/zip",
+            filename="medical_rag_backup.zip",
+            background=None  # Don't delete before sending
+        )
+
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/backup/restore")
+async def restore_backup(file: UploadFile = File(...)):
+    """Restore vector database and ingestion progress from a zip backup."""
+    import shutil
+    import tempfile
+    import zipfile
+    from src.config import settings as cfg
+
+    if not file.filename.endswith('.zip'):
+        return JSONResponse(status_code=400, content={"error": "File must be a .zip archive"})
+
+    try:
+        # Save uploaded file to temp location
+        tmp_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(tmp_dir, "restore.zip")
+        with open(zip_path, "wb") as f:
+            content = await file.read()
+            f.write(content)
+
+        # Validate zip contents
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            names = zf.namelist()
+            has_vector_db = any(n.startswith("vector_db/") for n in names)
+            if not has_vector_db:
+                shutil.rmtree(tmp_dir)
+                return JSONResponse(status_code=400, content={
+                    "error": "Invalid backup: missing vector_db/ directory"
+                })
+
+        # Extract to temp staging
+        extract_dir = os.path.join(tmp_dir, "extracted")
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(extract_dir)
+
+        # Replace vector_db
+        db_path = Path(cfg.vector_db_path)
+        if db_path.exists():
+            shutil.rmtree(db_path)
+        shutil.copytree(os.path.join(extract_dir, "vector_db"), db_path)
+
+        # Replace ingestion progress if present in backup
+        progress_src = os.path.join(extract_dir, "data", "ingestion_progress.json")
+        if os.path.exists(progress_src):
+            Path("data").mkdir(exist_ok=True)
+            shutil.copy2(progress_src, "data/ingestion_progress.json")
+
+        # Reset RAG sessions so they pick up the new DB
+        from api.query import _sessions
+        _sessions.clear()
+
+        # Cleanup temp files
+        shutil.rmtree(tmp_dir)
+
+        logger.info("Database restored from backup successfully")
+        return {"success": True, "message": "Database restored successfully. Please refresh the page."}
+
+    except Exception as e:
+        logger.error(f"Restore failed: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 # Auto-ingestion status endpoint
@@ -294,7 +496,6 @@ async def startup_event():
         await run_auto_ingestion()
 
         # Ingestion complete - open browser after short delay
-        import asyncio
         import webbrowser
         await asyncio.sleep(2)  # Wait for server to be ready
         logger.info("Opening browser to: http://localhost:8000")

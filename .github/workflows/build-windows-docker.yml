@@ -1,4 +1,4 @@
-name: Build Windows Docker Bundle
+name: Build Windows Docker Launcher
 
 on:
   push:
@@ -9,121 +9,75 @@ on:
 
 jobs:
   build-windows-docker:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create Windows Docker bundle
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build Docker launcher exe
+        run: pyinstaller build_windows_docker.spec
+
+      - name: Create distribution bundle
+        shell: pwsh
         run: |
-          mkdir -p bundle/MedicalRAG-Docker
+          $bundle = "dist/MedicalRAG-Docker"
+          New-Item -ItemType Directory -Force -Path $bundle
+
+          # Copy the launcher exe
+          Copy-Item "dist/MedicalRAG-Docker.exe" "$bundle/"
 
           # Copy Docker files
-          cp docker-compose.yml bundle/MedicalRAG-Docker/
-          cp Dockerfile bundle/MedicalRAG-Docker/
-          cp docker-entrypoint.sh bundle/MedicalRAG-Docker/
-          cp .env.example bundle/MedicalRAG-Docker/.env.example
-          cp .env.example bundle/MedicalRAG-Docker/.env
+          Copy-Item "docker-compose.yml" "$bundle/"
+          Copy-Item "Dockerfile" "$bundle/"
+          Copy-Item "docker-entrypoint.sh" "$bundle/"
+          Copy-Item ".env.example" "$bundle/.env.example"
+          Copy-Item ".env.example" "$bundle/.env"
+          Copy-Item "requirements-prod.txt" "$bundle/"
+          Copy-Item "app.py" "$bundle/"
 
           # Copy application source
-          cp -r src/ bundle/MedicalRAG-Docker/src/
-          cp -r api/ bundle/MedicalRAG-Docker/api/
-          cp -r static/ bundle/MedicalRAG-Docker/static/
-          cp app.py bundle/MedicalRAG-Docker/
-          cp requirements-prod.txt bundle/MedicalRAG-Docker/
+          Copy-Item -Recurse "src" "$bundle/src"
+          Copy-Item -Recurse "api" "$bundle/api"
+          Copy-Item -Recurse "static" "$bundle/static"
 
-          # Copy PDFs folder (empty placeholder)
-          mkdir -p bundle/MedicalRAG-Docker/pdfs
-          cp -r pdfs/*.pdf bundle/MedicalRAG-Docker/pdfs/ 2>/dev/null || true
+          # Copy PDFs
+          New-Item -ItemType Directory -Force -Path "$bundle/pdfs"
+          if (Test-Path "pdfs/*.pdf") {
+            Copy-Item "pdfs/*.pdf" "$bundle/pdfs/"
+          }
 
           # Copy docs
-          cp DOCKER_SETUP.md bundle/MedicalRAG-Docker/ 2>/dev/null || true
-          cp QUICK_START_DOCKER.txt bundle/MedicalRAG-Docker/ 2>/dev/null || true
+          if (Test-Path "DOCKER_SETUP.md") { Copy-Item "DOCKER_SETUP.md" "$bundle/" }
+          if (Test-Path "QUICK_START_DOCKER.txt") { Copy-Item "QUICK_START_DOCKER.txt" "$bundle/" }
 
-          # Create Windows start script
-          cat > bundle/MedicalRAG-Docker/start.bat << 'BATCH'
-          @echo off
-          echo ==========================================
-          echo Medical RAG - Docker Edition (Windows)
-          echo ==========================================
-          echo.
-          echo Checking Docker...
-          docker --version >nul 2>&1
-          if errorlevel 1 (
-              echo ERROR: Docker is not installed or not running.
-              echo Please install Docker Desktop from https://www.docker.com/products/docker-desktop
-              echo Make sure WSL 2 is enabled.
-              pause
-              exit /b 1
-          )
-          echo Docker found. Building and starting services...
-          echo.
-          echo [Step 1/3] Building application container...
-          docker compose up --build -d
-          echo.
-          echo [Step 2/3] Waiting for services to start...
-          echo First run will download AI models (~1.5 GB) and ingest PDFs.
-          echo This can take 5-15 minutes. Please be patient.
-          echo.
+          # Create a stop script as backup
+          Set-Content -Path "$bundle/stop.bat" -Value "@echo off`ndocker compose down`necho Stopped.`npause"
 
-          :waitloop
-          REM Check if app is healthy (returns 200 only after ingestion completes)
-          curl -sf http://localhost:8000/health >nul 2>&1
-          if %errorlevel%==0 goto ready
-
-          REM Show live status from the app container
-          for /f "delims=" %%i in ('docker logs medical-rag-app --tail 1 2^>nul') do set "LASTLOG=%%i"
-          if defined LASTLOG (
-              echo   %LASTLOG%
-          ) else (
-              echo   Waiting for containers to start...
-          )
-          timeout /t 5 /nobreak >nul
-          goto waitloop
-
-          :ready
-          echo.
-          echo [Step 3/3] Opening browser...
-          echo.
-          echo ==========================================
-          echo Medical RAG is ready!
-          echo Web interface: http://localhost:8000
-          echo ==========================================
-          echo.
-          start http://localhost:8000
-          echo To stop: run stop.bat or: docker compose down
-          echo To view logs: docker compose logs -f
-          echo.
-          pause
-          BATCH
-
-          # Create Windows stop script
-          cat > bundle/MedicalRAG-Docker/stop.bat << 'BATCH'
-          @echo off
-          echo Stopping Medical RAG...
-          docker compose down
-          echo Done.
-          pause
-          BATCH
-
-      - name: Create zip archive
-        run: |
-          cd bundle
-          zip -r MedicalRAG-Docker-Windows.zip MedicalRAG-Docker/
+          # Create the zip
+          Compress-Archive -Path $bundle -DestinationPath "dist/MedicalRAG-Docker-Windows.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MedicalRAG-Docker-Windows
-          path: bundle/MedicalRAG-Docker-Windows.zip
+          path: dist/MedicalRAG-Docker-Windows.zip
           retention-days: 90
 
       - name: Create Release (if tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: bundle/MedicalRAG-Docker-Windows.zip
+          files: dist/MedicalRAG-Docker-Windows.zip
           draft: false
           prerelease: false
         env:

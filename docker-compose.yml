@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Ollama Service - LLM inference engine
   ollama:

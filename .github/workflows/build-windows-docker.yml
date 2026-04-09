@@ -23,6 +23,7 @@ jobs:
           cp docker-compose.yml bundle/MedicalRAG-Docker/
           cp Dockerfile bundle/MedicalRAG-Docker/
           cp docker-entrypoint.sh bundle/MedicalRAG-Docker/
+          cp .env.example bundle/MedicalRAG-Docker/.env.example
           cp .env.example bundle/MedicalRAG-Docker/.env
 
           # Copy application source

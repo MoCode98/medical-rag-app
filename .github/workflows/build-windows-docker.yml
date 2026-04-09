@@ -58,21 +58,42 @@ jobs:
               exit /b 1
           )
           echo Docker found. Starting services...
-          echo This may take several minutes on first run (downloading models).
+          echo This may take several minutes on first run (downloading AI models).
           echo.
           docker compose up --build -d
           echo.
+          echo Waiting for the application to be ready...
+          echo (First run downloads AI models ~1.5 GB - please be patient)
+          echo.
+
+          set RETRIES=0
+          :waitloop
+          curl -sf http://localhost:8000/health >nul 2>&1
+          if %errorlevel%==0 goto ready
+          set /a RETRIES+=1
+          if %RETRIES% geq 120 (
+              echo.
+              echo Application did not become ready in time.
+              echo Check logs with: docker compose logs -f
+              pause
+              exit /b 1
+          )
+          <nul set /p "=."
+          timeout /t 3 /nobreak >nul
+          goto waitloop
+
+          :ready
+          echo.
+          echo.
           echo ==========================================
-          echo Medical RAG is starting up!
+          echo Medical RAG is ready!
           echo Web interface: http://localhost:8000
           echo ==========================================
           echo.
-          echo Waiting for application to be ready...
-          timeout /t 10 /nobreak >nul
           start http://localhost:8000
-          echo.
-          echo To stop: docker compose down
+          echo To stop: run stop.bat or: docker compose down
           echo To view logs: docker compose logs -f
+          echo.
           pause
           BATCH
 

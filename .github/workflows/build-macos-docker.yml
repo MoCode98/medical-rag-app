@@ -62,22 +62,38 @@ jobs:
           fi
 
           echo "Docker found. Starting services..."
-          echo "This may take several minutes on first run (downloading models)."
+          echo "This may take several minutes on first run (downloading AI models ~1.5 GB)."
           echo ""
 
           docker compose up --build -d
 
           echo ""
+          echo "Waiting for the application to be ready..."
+          echo "(First run downloads AI models - please be patient)"
+          echo ""
+
+          RETRIES=0
+          while ! curl -sf http://localhost:8000/health > /dev/null 2>&1; do
+              RETRIES=$((RETRIES + 1))
+              if [ $RETRIES -ge 120 ]; then
+                  echo ""
+                  echo "Application did not become ready in time."
+                  echo "Check logs with: docker compose logs -f"
+                  exit 1
+              fi
+              printf "."
+              sleep 3
+          done
+
+          echo ""
+          echo ""
           echo "=========================================="
-          echo "Medical RAG is starting up!"
+          echo "Medical RAG is ready!"
           echo "Web interface: http://localhost:8000"
           echo "=========================================="
           echo ""
-          echo "Waiting for application to be ready..."
-          sleep 10
           open http://localhost:8000 2>/dev/null || true
 
-          echo ""
           echo "To stop: ./stop.sh"
           echo "To view logs: docker compose logs -f"
           SHELL

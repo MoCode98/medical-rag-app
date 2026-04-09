@@ -1,0 +1,107 @@
+name: Build Windows Docker Bundle
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows-docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create Windows Docker bundle
+        run: |
+          mkdir -p bundle/MedicalRAG-Docker
+
+          # Copy Docker files
+          cp docker-compose.yml bundle/MedicalRAG-Docker/
+          cp Dockerfile bundle/MedicalRAG-Docker/
+          cp docker-entrypoint.sh bundle/MedicalRAG-Docker/
+          cp .env.example bundle/MedicalRAG-Docker/.env
+
+          # Copy application source
+          cp -r src/ bundle/MedicalRAG-Docker/src/
+          cp -r api/ bundle/MedicalRAG-Docker/api/
+          cp -r static/ bundle/MedicalRAG-Docker/static/
+          cp app.py bundle/MedicalRAG-Docker/
+          cp requirements-prod.txt bundle/MedicalRAG-Docker/
+
+          # Copy PDFs folder (empty placeholder)
+          mkdir -p bundle/MedicalRAG-Docker/pdfs
+          cp -r pdfs/*.pdf bundle/MedicalRAG-Docker/pdfs/ 2>/dev/null || true
+
+          # Copy docs
+          cp DOCKER_SETUP.md bundle/MedicalRAG-Docker/ 2>/dev/null || true
+          cp QUICK_START_DOCKER.txt bundle/MedicalRAG-Docker/ 2>/dev/null || true
+
+          # Create Windows start script
+          cat > bundle/MedicalRAG-Docker/start.bat << 'BATCH'
+          @echo off
+          echo ==========================================
+          echo Medical RAG - Docker Edition (Windows)
+          echo ==========================================
+          echo.
+          echo Checking Docker...
+          docker --version >nul 2>&1
+          if errorlevel 1 (
+              echo ERROR: Docker is not installed or not running.
+              echo Please install Docker Desktop from https://www.docker.com/products/docker-desktop
+              echo Make sure WSL 2 is enabled.
+              pause
+              exit /b 1
+          )
+          echo Docker found. Starting services...
+          echo This may take several minutes on first run (downloading models).
+          echo.
+          docker compose up --build -d
+          echo.
+          echo ==========================================
+          echo Medical RAG is starting up!
+          echo Web interface: http://localhost:8000
+          echo ==========================================
+          echo.
+          echo Waiting for application to be ready...
+          timeout /t 10 /nobreak >nul
+          start http://localhost:8000
+          echo.
+          echo To stop: docker compose down
+          echo To view logs: docker compose logs -f
+          pause
+          BATCH
+
+          # Create Windows stop script
+          cat > bundle/MedicalRAG-Docker/stop.bat << 'BATCH'
+          @echo off
+          echo Stopping Medical RAG...
+          docker compose down
+          echo Done.
+          pause
+          BATCH
+
+      - name: Create zip archive
+        run: |
+          cd bundle
+          zip -r MedicalRAG-Docker-Windows.zip MedicalRAG-Docker/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MedicalRAG-Docker-Windows
+          path: bundle/MedicalRAG-Docker-Windows.zip
+          retention-days: 90
+
+      - name: Create Release (if tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: bundle/MedicalRAG-Docker-Windows.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

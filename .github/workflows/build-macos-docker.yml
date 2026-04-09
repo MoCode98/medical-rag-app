@@ -1,0 +1,114 @@
+name: Build macOS Docker Bundle
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos-docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create macOS Docker bundle
+        run: |
+          mkdir -p bundle/MedicalRAG-Docker
+
+          # Copy Docker files
+          cp docker-compose.yml bundle/MedicalRAG-Docker/
+          cp Dockerfile bundle/MedicalRAG-Docker/
+          cp docker-entrypoint.sh bundle/MedicalRAG-Docker/
+          cp .env.example bundle/MedicalRAG-Docker/.env
+
+          # Copy application source
+          cp -r src/ bundle/MedicalRAG-Docker/src/
+          cp -r api/ bundle/MedicalRAG-Docker/api/
+          cp -r static/ bundle/MedicalRAG-Docker/static/
+          cp app.py bundle/MedicalRAG-Docker/
+          cp requirements-prod.txt bundle/MedicalRAG-Docker/
+
+          # Copy PDFs folder (empty placeholder)
+          mkdir -p bundle/MedicalRAG-Docker/pdfs
+          cp -r pdfs/*.pdf bundle/MedicalRAG-Docker/pdfs/ 2>/dev/null || true
+
+          # Copy docs
+          cp DOCKER_SETUP.md bundle/MedicalRAG-Docker/ 2>/dev/null || true
+          cp QUICK_START_DOCKER.txt bundle/MedicalRAG-Docker/ 2>/dev/null || true
+
+          # Create macOS start script
+          cat > bundle/MedicalRAG-Docker/start.sh << 'SHELL'
+          #!/bin/bash
+          echo "=========================================="
+          echo "Medical RAG - Docker Edition (macOS)"
+          echo "=========================================="
+          echo ""
+
+          # Check Docker
+          if ! command -v docker &> /dev/null; then
+              echo "ERROR: Docker is not installed."
+              echo "Please install Docker Desktop from https://www.docker.com/products/docker-desktop"
+              exit 1
+          fi
+
+          if ! docker info &> /dev/null; then
+              echo "ERROR: Docker is not running. Please start Docker Desktop."
+              exit 1
+          fi
+
+          echo "Docker found. Starting services..."
+          echo "This may take several minutes on first run (downloading models)."
+          echo ""
+
+          docker compose up --build -d
+
+          echo ""
+          echo "=========================================="
+          echo "Medical RAG is starting up!"
+          echo "Web interface: http://localhost:8000"
+          echo "=========================================="
+          echo ""
+          echo "Waiting for application to be ready..."
+          sleep 10
+          open http://localhost:8000 2>/dev/null || true
+
+          echo ""
+          echo "To stop: ./stop.sh"
+          echo "To view logs: docker compose logs -f"
+          SHELL
+          chmod +x bundle/MedicalRAG-Docker/start.sh
+
+          # Create macOS stop script
+          cat > bundle/MedicalRAG-Docker/stop.sh << 'SHELL'
+          #!/bin/bash
+          echo "Stopping Medical RAG..."
+          docker compose down
+          echo "Done."
+          SHELL
+          chmod +x bundle/MedicalRAG-Docker/stop.sh
+
+      - name: Create zip archive
+        run: |
+          cd bundle
+          zip -r MedicalRAG-Docker-macOS.zip MedicalRAG-Docker/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MedicalRAG-Docker-macOS
+          path: bundle/MedicalRAG-Docker-macOS.zip
+          retention-days: 90
+
+      - name: Create Release (if tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: bundle/MedicalRAG-Docker-macOS.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

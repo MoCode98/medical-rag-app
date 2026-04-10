@@ -29,7 +29,9 @@ jobs:
 
       - name: Create distribution bundle
         run: |
-          BUNDLE="dist/MedicalRAG-Docker"
+          # Use a different name to avoid colliding with dist/MedicalRAG-Docker (the PyInstaller binary)
+          BUNDLE="bundle/MedicalRAG-Docker"
+          rm -rf bundle
           mkdir -p "$BUNDLE"
 
           # Copy the launcher .app
@@ -64,21 +66,21 @@ jobs:
           chmod +x "$BUNDLE/stop.sh"
 
           # Create the zip
-          cd dist
-          zip -r MedicalRAG-Docker-macOS.zip MedicalRAG-Docker/
+          cd bundle
+          zip -r ../MedicalRAG-Docker-macOS.zip MedicalRAG-Docker/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: MedicalRAG-Docker-macOS
-          path: dist/MedicalRAG-Docker-macOS.zip
+          path: MedicalRAG-Docker-macOS.zip
           retention-days: 90
 
       - name: Create Release (if tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/MedicalRAG-Docker-macOS.zip
+          files: MedicalRAG-Docker-macOS.zip
           draft: false
           prerelease: false
         env:

@@ -142,11 +142,24 @@ def prompt_docker_start():
     sys.exit(1)
 
 
+def cleanup_stale_containers():
+    """Remove stale containers from previous runs that might conflict."""
+    stale = ["medical-rag-ollama", "medical-rag-app"]
+    for name in stale:
+        subprocess.run(
+            ["docker", "rm", "-f", name],
+            capture_output=True, text=True, timeout=30
+        )
+
+
 def run_docker_compose(app_dir):
     """Start the Docker containers."""
     print("[Step 1/3] Starting Docker containers...")
     print("  (First run builds the image and downloads AI models - this takes 5-15 min)")
     print()
+
+    # Clean up any leftover containers from previous runs
+    cleanup_stale_containers()
 
     result = subprocess.run(
         ["docker", "compose", "up", "--build", "-d"],

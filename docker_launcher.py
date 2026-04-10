@@ -28,10 +28,20 @@ DOCKER_INSTALL_URLS = {
 
 
 def get_app_dir():
-    """Get the directory where the launcher and docker-compose.yml live."""
+    """Get the directory where docker-compose.yml lives.
+
+    For a macOS .app bundle, navigate out of Contents/MacOS/ to the folder
+    containing the .app. For a plain exe (Windows/Linux), use its directory.
+    """
     if getattr(sys, 'frozen', False):
-        # Running as PyInstaller bundle
-        return os.path.dirname(sys.executable)
+        exe_dir = os.path.dirname(sys.executable)
+        # If we're inside a macOS .app bundle (.../MedicalRAG-Docker.app/Contents/MacOS),
+        # walk up to the folder containing the .app
+        if "/Contents/MacOS" in exe_dir.replace(os.sep, "/"):
+            # exe_dir ends with .app/Contents/MacOS — go up three levels
+            parent = os.path.dirname(os.path.dirname(os.path.dirname(exe_dir)))
+            return parent
+        return exe_dir
     else:
         return os.path.dirname(os.path.abspath(__file__))
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from src.chunker import IntelligentChunker
@@ -18,7 +19,7 @@ from src.logging_config import get_logger
 from src.metrics import get_metrics
 from src.pdf_parser import PDFParser
 from src.validation import ValidationError, validate_filename
-from src.vector_db import VectorDatabase
+from src.vector_db import VectorDatabase, get_vector_db, reset_vector_db_cache
 
 router = APIRouter()
 logger = get_logger()
@@ -310,7 +311,7 @@ async def delete_ingested_file(filename: str, delete_file: bool = False) -> dict
         logger.info(f"Deleting ingested file: {filename} (delete_file={delete_file})")
 
         # Remove chunks from vector database
-        vector_db = VectorDatabase()
+        vector_db = get_vector_db()
         chunks_deleted = vector_db.delete_by_source_file(filename)
 
         # Remove from ingestion progress tracking
@@ -369,7 +370,7 @@ async def bulk_delete_files(request: BulkDeleteRequest) -> dict[str, Any]:
         Summary of deletions
     """
     try:
-        vector_db = VectorDatabase()
+        vector_db = get_vector_db()
         progress = IngestionProgress()
 
         total_chunks = 0
@@ -414,6 +415,135 @@ async def bulk_delete_files(request: BulkDeleteRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/pdf/{filename:path}")
+async def get_pdf(filename: str):
+    """
+    Stream a PDF file from the pdfs folder so the frontend can render it
+    inline. Filename is validated to prevent path traversal.
+    """
+    try:
+        safe_name = validate_filename(filename, allowed_extensions=[".pdf"])
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    pdf_path = Path(settings.pdf_folder) / safe_name
+    if not pdf_path.exists() or not pdf_path.is_file():
+        raise HTTPException(status_code=404, detail=f"PDF not found: {safe_name}")
+
+    # `inline` so the browser renders it instead of downloading it
+    return FileResponse(
+        pdf_path,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+    )
+
+
+class RechunkRequest(BaseModel):
+    """Optional per-request chunking overrides for /rechunk."""
+    chunk_size: int | None = None
+    chunk_overlap: int | None = None
+
+
+@router.post("/rechunk/{filename:path}")
+async def rechunk_file(filename: str, body: RechunkRequest | None = None) -> dict[str, Any]:
+    """
+    Re-chunk a single PDF in place: drop its existing chunks from the vector
+    database, re-parse the PDF, re-chunk it (optionally with custom
+    chunk_size / chunk_overlap), and re-embed. Useful for experimenting with
+    different chunk sizes on a specific document without touching the rest.
+
+    Args:
+        filename: PDF filename (basename, must live in the pdfs folder)
+        body: Optional chunk_size / chunk_overlap overrides for this run
+
+    Returns:
+        Summary of old vs. new chunk counts and the chunking parameters used.
+    """
+    try:
+        # Validate filename
+        try:
+            safe_name = validate_filename(filename, allowed_extensions=[".pdf"])
+        except ValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        pdf_path = Path(settings.pdf_folder) / safe_name
+        if not pdf_path.exists():
+            raise HTTPException(status_code=404, detail=f"PDF not found: {safe_name}")
+
+        # Resolve chunking params: explicit body > runtime settings > config
+        from src import runtime_settings as rt
+        override_size = body.chunk_size if body else None
+        override_overlap = body.chunk_overlap if body else None
+        chunk_size = override_size or rt.get("chunk_size") or settings.chunk_size
+        chunk_overlap = override_overlap or rt.get("chunk_overlap") or settings.chunk_overlap
+
+        if chunk_overlap >= chunk_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"chunk_overlap ({chunk_overlap}) must be less than chunk_size ({chunk_size})",
+            )
+
+        logger.info(
+            f"Rechunking {safe_name} with chunk_size={chunk_size}, chunk_overlap={chunk_overlap}"
+        )
+
+        vector_db = get_vector_db()
+
+        # 1. Drop the existing chunks for this file
+        old_chunks = vector_db.delete_by_source_file(safe_name)
+
+        # 2. Re-parse the PDF
+        parser = PDFParser()
+        doc = parser.parse_pdf(pdf_path)
+        if not doc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to re-parse {safe_name}",
+            )
+
+        # 3. Re-chunk with the requested parameters
+        chunker = IntelligentChunker(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
+        new_chunks = chunker.chunk_document(doc)
+
+        if not new_chunks:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Re-chunking produced no chunks for {safe_name}",
+            )
+
+        # 4. Re-embed and write back to the vector DB
+        vector_db.add_chunks(new_chunks)
+
+        # 5. Make sure the file stays marked as processed
+        progress = IngestionProgress()
+        progress.processed_files.add(safe_name)
+        progress.failed_files.pop(safe_name, None)
+        progress._save_progress()
+
+        logger.info(
+            f"Rechunked {safe_name}: {old_chunks} → {len(new_chunks)} chunks"
+        )
+
+        return {
+            "success": True,
+            "filename": safe_name,
+            "old_chunk_count": old_chunks,
+            "new_chunk_count": len(new_chunks),
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap,
+            "message": f"Rechunked {safe_name}: {old_chunks} → {len(new_chunks)} chunks",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to rechunk {filename}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class BulkReingestRequest(BaseModel):
     """Request model for bulk re-ingestion."""
     filenames: list[str]
@@ -432,7 +562,7 @@ async def bulk_reingest_files(request: BulkReingestRequest) -> dict[str, Any]:
         Summary of files marked for re-ingestion
     """
     try:
-        vector_db = VectorDatabase()
+        vector_db = get_vector_db()
         progress = IngestionProgress()
 
         total_chunks = 0

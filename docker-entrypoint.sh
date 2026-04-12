@@ -32,6 +32,11 @@ EMBEDDING_MODEL="${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}"
 LLM_MODEL="${OLLAMA_MODEL:-deepseek-r1:1.5b}"
 
 for MODEL in "$EMBEDDING_MODEL" "$LLM_MODEL"; do
+    # Skip the pull if the model is already present in the cached volume.
+    if curl -sf "$OLLAMA_URL/api/tags" 2>/dev/null | grep -q "\"$MODEL\""; then
+        echo "  $MODEL already present, skipping pull"
+        continue
+    fi
     echo "  Pulling $MODEL..."
     curl -sf -X POST "$OLLAMA_URL/api/pull" \
         -H "Content-Type: application/json" \

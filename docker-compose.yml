@@ -17,8 +17,11 @@ services:
       timeout: 10s
       retries: 5
       start_period: 15s
-    # GPU support for Windows with WSL 2 and NVIDIA GPU
-    # Uncomment the following lines if you have an NVIDIA GPU:
+    # No resource limits - Ollama uses everything Docker Desktop has been
+    # given (Settings > Resources). Inference is the bottleneck, so let it
+    # take whatever it can.
+    #
+    # GPU support (NVIDIA + NVIDIA Container Runtime): add a deploy block:
     # deploy:
     #   resources:
     #     reservations:
@@ -39,10 +42,12 @@ services:
       ollama:
         condition: service_healthy
     volumes:
-      # Bind mount for PDFs - allows adding new PDFs without rebuilding
-      - ./pdfs:/app/pdfs
+      # Bind mount for PDFs - allows adding new PDFs without rebuilding.
+      # ':cached' tells Docker Desktop on macOS the host is authoritative,
+      # dramatically speeding up directory scans (no effect on Win/Linux).
+      - ./pdfs:/app/pdfs:cached
       # Bind mount for logs - view logs from host
-      - ./logs:/app/logs
+      - ./logs:/app/logs:cached
       # Named volume for ChromaDB vector database - persists between restarts
       - vector_db:/app/vector_db
       # Named volume for embeddings cache
@@ -79,21 +84,13 @@ services:
 
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 120s  # Longer start period for model downloads and ingestion
 
-    # Resource limits (optional - adjust based on your system)
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '4'
-    #       memory: 8G
-    #     reservations:
-    #       cpus: '2'
-    #       memory: 4G
+    # No resource limits - the app uses whatever Docker Desktop allows.
 
 # Named volumes for data persistence
 volumes:

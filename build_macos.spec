@@ -56,6 +56,7 @@ hiddenimports = [
     'src.embedding_cache',
     'src.ingestion_progress',
     'src.rag_pipeline',
+    'src.runtime_settings',
     'src.conversational_rag',
     'src.conversation',
     'src.metrics',

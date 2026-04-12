@@ -51,7 +51,7 @@ class OllamaEmbeddings:
         self.use_cache = use_cache
         if use_cache:
             self.cache = EmbeddingCache()
-            logger.info("Embedding cache enabled")
+            logger.debug("Embedding cache enabled")
         else:
             self.cache = None
             logger.info("Embedding cache disabled")
@@ -65,7 +65,7 @@ class OllamaEmbeddings:
         try:
             response = httpx.get(f"{self.base_url}/api/tags", timeout=settings.connection_timeout)
             response.raise_for_status()
-            logger.info(f"Successfully connected to Ollama at {self.base_url}")
+            logger.debug(f"Successfully connected to Ollama at {self.base_url}")
         except httpx.ConnectError:
             logger.error(
                 f"Cannot connect to Ollama at {self.base_url}. "
@@ -104,7 +104,7 @@ class OllamaEmbeddings:
                     logger.error(f"Failed to pull model '{self.model}': {e}")
                     raise
             else:
-                logger.info(f"Embedding model '{self.model}' is available")
+                logger.debug(f"Embedding model '{self.model}' is available")
 
         except Exception as e:
             logger.error(f"Error checking model availability: {e}")

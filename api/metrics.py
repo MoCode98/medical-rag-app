@@ -10,7 +10,7 @@ from src.config import settings
 from src.ingestion_progress import IngestionProgress
 from src.logging_config import get_logger
 from src.metrics import get_metrics
-from src.vector_db import VectorDatabase
+from src.vector_db import VectorDatabase, get_vector_db
 
 router = APIRouter()
 logger = get_logger()
@@ -26,7 +26,7 @@ async def get_all_stats() -> dict[str, Any]:
     """
     try:
         # Database stats
-        vector_db = VectorDatabase()
+        vector_db = get_vector_db()
         db_stats = vector_db.get_collection_stats()
 
         # Ingestion progress
@@ -82,7 +82,7 @@ async def get_database_stats() -> dict[str, Any]:
         Database statistics
     """
     try:
-        vector_db = VectorDatabase()
+        vector_db = get_vector_db()
         stats = vector_db.get_collection_stats()
 
         return {
@@ -104,7 +104,7 @@ async def get_document_library() -> dict[str, Any]:
         Full document library with per-file chunk statistics
     """
     try:
-        vector_db = VectorDatabase()
+        vector_db = get_vector_db()
         files = vector_db.get_all_files_with_counts()
         total_chunks = sum(f["chunks"] for f in files)
 
@@ -120,6 +120,24 @@ async def get_document_library() -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/chunk/{chunk_id}")
+async def delete_chunk(chunk_id: str) -> dict[str, Any]:
+    """
+    Delete a single chunk from the vector database by ID.
+    """
+    try:
+        vector_db = get_vector_db()
+        deleted = vector_db.delete_chunk(chunk_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail=f"Chunk {chunk_id} not found")
+        return {"success": True, "chunk_id": chunk_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete chunk {chunk_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/library/{filename:path}")
 async def get_document_chunks(filename: str) -> dict[str, Any]:
     """
@@ -132,7 +150,7 @@ async def get_document_chunks(filename: str) -> dict[str, Any]:
         All chunks with content and metadata
     """
     try:
-        vector_db = VectorDatabase()
+        vector_db = get_vector_db()
         chunks = vector_db.get_chunks_for_file(filename)
 
         return {
@@ -191,7 +209,7 @@ async def health_check() -> dict[str, Any]:
     """
     try:
         # Check database
-        vector_db = VectorDatabase()
+        vector_db = get_vector_db()
         db_stats = vector_db.get_collection_stats()
         db_healthy = db_stats.get("total_chunks", 0) > 0
 

@@ -96,18 +96,48 @@ class PDFParser:
         """
         Parse PDF using pymupdf4llm for better structure preservation.
 
+        Uses ``page_chunks=True`` so we get one markdown blob per page, and
+        prepends a ``[Page N]`` marker to each. The chunker later reads those
+        markers to record real page numbers on every chunk — without them
+        every chunk falls back to page 0.
+
         Args:
             pdf_path: Path to PDF file
 
         Returns:
-            Parsed content as markdown with structure, or None if failed
+            Parsed content as markdown with [Page N] markers, or None if failed
         """
         try:
             # Validate file is readable
             check_file_readable(pdf_path)
 
-            # pymupdf4llm returns markdown with better structure preservation
-            md_text = pymupdf4llm.to_markdown(str(pdf_path))
+            # page_chunks=True returns a list of {text, metadata, ...} per page
+            page_chunks = pymupdf4llm.to_markdown(str(pdf_path), page_chunks=True)
+
+            if not isinstance(page_chunks, list) or not page_chunks:
+                logger.warning(
+                    f"pymupdf4llm returned no page chunks for {pdf_path.name}"
+                )
+                return None
+
+            parts = []
+            for entry in page_chunks:
+                # Each entry is a dict; metadata.page is 0-indexed in pymupdf4llm
+                meta = entry.get("metadata", {}) if isinstance(entry, dict) else {}
+                page_num = meta.get("page")
+                if page_num is None:
+                    # Fallback: position-based numbering if metadata is missing
+                    page_num = len(parts)
+                page_num_1based = int(page_num) + 1
+                text = (entry.get("text") if isinstance(entry, dict) else str(entry)) or ""
+                if not text.strip():
+                    continue
+                parts.append(f"[Page {page_num_1based}]\n{text}")
+
+            if not parts:
+                return None
+
+            md_text = "\n\n".join(parts)
             return {"content": md_text, "format": "markdown"}
         except Exception as e:
             logger.warning(f"pymupdf4llm failed for {pdf_path.name}: {e}")

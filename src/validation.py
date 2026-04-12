@@ -115,10 +115,11 @@ def validate_model_name(model_name: str) -> str:
 
     model_name = model_name.strip()
 
-    # Model names should be alphanumeric with hyphens, colons, and underscores
-    if not re.match(r"^[a-zA-Z0-9_:\-\.]+$", model_name):
+    # Model names: alphanumeric with hyphens, colons, dots, underscores, and
+    # forward slashes (for HuggingFace-style names like "hf.co/user/model").
+    if not re.match(r"^[a-zA-Z0-9_:\-\./]+$", model_name):
         raise ValidationError(
-            "Model name can only contain letters, numbers, hyphens, colons, dots, and underscores"
+            "Model name can only contain letters, numbers, hyphens, colons, dots, slashes, and underscores"
         )
 
     return model_name

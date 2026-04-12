@@ -46,7 +46,15 @@ class ConversationalRAG(MedicalRAG):
             use_reranking: Whether to use LLM re-ranking
             use_hybrid_search: Whether to use hybrid search
         """
-        super().__init__(vector_db, model, temperature, max_tokens, system_prompt)
+        # Use keyword args — MedicalRAG.__init__ has `base_url` in slot 3,
+        # so positional passing would put `temperature` into `base_url`.
+        super().__init__(
+            vector_db=vector_db,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            system_prompt=system_prompt,
+        )
 
         self.memory = ConversationMemory(max_history=max_history, save_path=conversation_save_path)
 
@@ -63,6 +71,35 @@ class ConversationalRAG(MedicalRAG):
             f"Initialized conversational RAG "
             f"(hybrid={use_hybrid_search}, rerank={use_reranking})"
         )
+
+    # Words that, in a short question, suggest the user is following up on
+    # something just said rather than starting a new topic.
+    _FOLLOWUP_MARKERS = (
+        "that", "this", "it", "those", "these", "more", "explain", "expand",
+        "elaborate", "clarify", "and", "why", "how so", "what about", "such",
+        "really", "mean", "means",
+    )
+
+    def _build_search_query(self, question: str) -> str:
+        """
+        Build the query string used for vector retrieval.
+
+        Short pronoun-heavy follow-ups ("what does that mean?", "tell me more")
+        have no semantic content, so retrieving by their embedding returns
+        garbage. When we detect one, fuse it with the most recent user
+        question so retrieval anchors on the original topic. The model still
+        sees the original short question for generation — it knows it's
+        being asked to elaborate, not to re-answer.
+        """
+        if not self.memory.history:
+            return question
+        words = question.lower().split()
+        if len(words) > 6:
+            return question
+        if not any(marker in words for marker in self._FOLLOWUP_MARKERS):
+            return question
+        prev_q = self.memory.history[-1].question
+        return f"{prev_q} {question}"
 
     def query(
         self,
@@ -87,23 +124,24 @@ class ConversationalRAG(MedicalRAG):
         """
         logger.info(f"Processing conversational query: '{question[:100]}...'")
 
-        # Get conversation context if enabled
-        conv_context = ""
-        if use_conversation_context and self.memory.history:
-            conv_context = self.memory.get_context(num_turns=3)
-            logger.info("Including conversation context from last 3 turns")
+        # If this is a short follow-up like "what does that mean?", fuse it
+        # with the previous user question so retrieval has something concrete
+        # to anchor on. Generation still sees the original short question.
+        search_query = self._build_search_query(question) if use_conversation_context else question
+        if search_query != question:
+            logger.info(f"Follow-up detected — searching with fused query: '{search_query[:100]}'")
 
-        # Step 1: Retrieve context
+        # Step 1: Retrieve context (using the possibly-fused search query)
         if self.use_hybrid_search:
             logger.info("Using hybrid search for retrieval")
             retrieved_chunks = self.vector_db.hybrid_search(
-                query_text=question,
+                query_text=search_query,
                 top_k=top_k or settings.top_k_results,
                 filter_metadata=filter_metadata,
             )
         else:
             retrieved_chunks = self.retrieve_context(
-                query=question, top_k=top_k, filter_metadata=filter_metadata
+                query=search_query, top_k=top_k, filter_metadata=filter_metadata
             )
 
         # Step 2: Re-rank if enabled
@@ -123,14 +161,21 @@ class ConversationalRAG(MedicalRAG):
                 model_used=self.model,
             )
 
-        # Step 3: Format context with conversation history
+        # Step 3: Format the retrieved context (research only — conversation
+        # history is now passed as real chat messages, not embedded here).
         context = self.format_context(retrieved_chunks)
 
-        if conv_context:
-            context = f"[Previous Conversation]\n{conv_context}\n\n[Retrieved Research Context]\n{context}"
+        # Step 4: Build chat-message history from prior turns. Each turn
+        # contributes a user question and the assistant answer, in order.
+        history_messages: list[dict[str, str]] = []
+        if use_conversation_context and self.memory.history:
+            for turn in self.memory.history[-3:]:
+                history_messages.append({"role": "user", "content": turn.question})
+                history_messages.append({"role": "assistant", "content": turn.answer})
+            logger.info(f"Threading {len(history_messages) // 2} prior turns into chat history")
 
-        # Step 4: Generate answer
-        answer = self.generate_answer(question, context)
+        # Step 5: Generate answer
+        answer = self.generate_answer(question, context, history=history_messages)
 
         # Step 5: Prepare sources
         sources = []

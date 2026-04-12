@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from src import runtime_settings as rt
 from src.config import settings
 from src.conversational_rag import ConversationalRAG
 from src.logging_config import get_logger
@@ -21,7 +22,7 @@ from src.validation import (
     validate_temperature,
     validate_top_k,
 )
-from src.vector_db import VectorDatabase
+from src.vector_db import VectorDatabase, get_vector_db
 
 router = APIRouter()
 logger = get_logger()
@@ -53,7 +54,7 @@ def get_rag(session_id: str = "default") -> ConversationalRAG:
         return _sessions[session_id]["rag"]
 
     try:
-        vector_db = VectorDatabase()
+        vector_db = get_vector_db()
         stats = vector_db.get_collection_stats()
 
         if stats["total_chunks"] == 0:
@@ -68,7 +69,14 @@ def get_rag(session_id: str = "default") -> ConversationalRAG:
             del _sessions[oldest]
             logger.info(f"Evicted oldest session: {oldest}")
 
-        rag = ConversationalRAG(vector_db=vector_db)
+        # Apply runtime overrides from the Settings tab so model/temperature
+        # changes take effect immediately on the next session.
+        rag = ConversationalRAG(
+            vector_db=vector_db,
+            model=rt.get("ollama_model"),
+            temperature=rt.get("temperature"),
+            max_tokens=rt.get("max_tokens"),
+        )
         _sessions[session_id] = {"rag": rag, "last_used": time.time()}
         logger.info(f"Created session '{session_id}' with {stats['total_chunks']} chunks")
         return rag
@@ -185,6 +193,58 @@ async def get_available_models() -> dict[str, Any]:
             "default": settings.ollama_model,
             "error": "Could not connect to Ollama"
         }
+
+
+class PullModelRequest(BaseModel):
+    """Request model for pulling a new Ollama model."""
+    model: str
+
+
+@router.post("/models/pull")
+async def pull_model(body: PullModelRequest) -> dict[str, Any]:
+    """
+    Pull a new model into the local Ollama instance. Blocks until done.
+
+    Args:
+        body: Request with model name (e.g. "llama3.2:latest")
+
+    Returns:
+        Status message indicating success or failure.
+    """
+    try:
+        model_name = validate_model_name(body.model)
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        import requests
+        # Stream the pull so the connection stays alive on slow networks.
+        with requests.post(
+            f"{settings.ollama_base_url}/api/pull",
+            json={"name": model_name, "stream": True},
+            stream=True,
+            timeout=900,  # 15 min ceiling for large models
+        ) as resp:
+            resp.raise_for_status()
+            last_status = ""
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                try:
+                    import json as _json
+                    payload = _json.loads(line)
+                    last_status = payload.get("status", last_status)
+                    if payload.get("error"):
+                        raise HTTPException(status_code=502, detail=payload["error"])
+                except ValueError:
+                    continue
+        logger.info(f"Pulled model {model_name}: {last_status}")
+        return {"success": True, "model": model_name, "status": last_status or "complete"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to pull model {model_name}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to pull model: {e}")
 
 
 @router.post("/reset")

@@ -63,7 +63,7 @@ class VectorDatabase:
                 name=self.collection_name,
                 metadata={"hnsw:space": "cosine"},  # Use cosine similarity
             )
-            logger.info(
+            logger.debug(
                 f"Initialized collection '{self.collection_name}' "
                 f"with {self.collection.count()} documents"
             )
@@ -320,6 +320,27 @@ class VectorDatabase:
             logger.error(f"Error getting chunks for {source_file}: {e}")
             return []
 
+    def delete_chunk(self, chunk_id: str) -> bool:
+        """
+        Delete a single chunk by its ChromaDB ID.
+
+        Args:
+            chunk_id: The ChromaDB document ID to delete.
+
+        Returns:
+            True if the chunk existed and was deleted, False otherwise.
+        """
+        try:
+            existing = self.collection.get(ids=[chunk_id], include=[])
+            if not existing.get("ids"):
+                return False
+            self.collection.delete(ids=[chunk_id])
+            logger.info(f"Deleted chunk {chunk_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error deleting chunk {chunk_id}: {e}")
+            raise
+
     def delete_by_source_file(self, source_file: str) -> int:
         """
         Delete all chunks belonging to a specific source file.
@@ -409,6 +430,29 @@ class VectorDatabase:
         except Exception as e:
             logger.error(f"Error deleting collection: {e}")
             raise
+
+
+# Process-wide cache so API endpoints don't reinit Chroma + Ollama on every
+# request. Keyed by (db_path, collection_name).
+_vector_db_cache: dict[tuple, "VectorDatabase"] = {}
+
+
+def get_vector_db(
+    db_path: str | None = None,
+    collection_name: str = "medical_research",
+) -> "VectorDatabase":
+    """Return a cached VectorDatabase instance, creating one if needed."""
+    key = (db_path or settings.vector_db_path, collection_name)
+    inst = _vector_db_cache.get(key)
+    if inst is None:
+        inst = VectorDatabase(db_path=db_path, collection_name=collection_name)
+        _vector_db_cache[key] = inst
+    return inst
+
+
+def reset_vector_db_cache() -> None:
+    """Drop the cached instance (e.g. after a wipe/restore)."""
+    _vector_db_cache.clear()
 
 
 if __name__ == "__main__":

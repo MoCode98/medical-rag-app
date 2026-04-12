@@ -143,7 +143,15 @@ async def root():
     """Serve the main UI."""
     index_path = static_dir / "index.html"
     if index_path.exists():
-        return FileResponse(index_path)
+        # no-store so iterating on static/index.html during development
+        # never gets masked by a stale browser cache.
+        return FileResponse(
+            index_path,
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            },
+        )
     else:
         return {
             "message": "Medical Research RAG API",
@@ -166,28 +174,29 @@ async def health():
     return {"status": "healthy", "service": "Medical Research RAG"}
 
 
-# Runtime settings (overrides for config defaults)
-_runtime_settings = {}
+# Runtime settings (overrides for config defaults) — shared with api/query.py
+from src import runtime_settings as _rt
 
 @app.get("/api/settings")
 async def get_settings():
     """Get current runtime settings with defaults from config."""
     from src.config import settings as cfg
+    overrides = _rt.get_overrides()
     return {
         "success": True,
         "settings": {
-            "ollama_model": _runtime_settings.get("ollama_model", cfg.ollama_model),
-            "temperature": _runtime_settings.get("temperature", cfg.temperature),
-            "top_k_results": _runtime_settings.get("top_k_results", cfg.top_k_results),
-            "max_tokens": _runtime_settings.get("max_tokens", cfg.max_tokens),
-            "chunk_size": _runtime_settings.get("chunk_size", cfg.chunk_size),
-            "chunk_overlap": _runtime_settings.get("chunk_overlap", cfg.chunk_overlap),
-            "ollama_base_url": _runtime_settings.get("ollama_base_url", cfg.ollama_base_url),
+            "ollama_model": overrides.get("ollama_model", cfg.ollama_model),
+            "temperature": overrides.get("temperature", cfg.temperature),
+            "top_k_results": overrides.get("top_k_results", cfg.top_k_results),
+            "max_tokens": overrides.get("max_tokens", cfg.max_tokens),
+            "chunk_size": overrides.get("chunk_size", cfg.chunk_size),
+            "chunk_overlap": overrides.get("chunk_overlap", cfg.chunk_overlap),
+            "ollama_base_url": overrides.get("ollama_base_url", cfg.ollama_base_url),
             "ollama_embedding_model": cfg.ollama_embedding_model,
-            "max_query_length": _runtime_settings.get("max_query_length", cfg.max_query_length),
+            "max_query_length": overrides.get("max_query_length", cfg.max_query_length),
             "rate_limit_per_minute": cfg.rate_limit_per_minute,
         },
-        "overrides": _runtime_settings
+        "overrides": overrides
     }
 
 @app.post("/api/settings")
@@ -206,6 +215,7 @@ async def update_settings(updates: dict):
 
     applied = {}
     errors = []
+    model_changed = False
 
     for key, value in updates.items():
         if key not in allowed:
@@ -225,26 +235,46 @@ async def update_settings(updates: dict):
             if key == "chunk_size" and not (100 <= cast_value <= 2048):
                 errors.append(f"chunk_size must be 100-2048, got {cast_value}")
                 continue
-            if key == "chunk_overlap" and not (0 <= cast_value <= 200):
-                errors.append(f"chunk_overlap must be 0-200, got {cast_value}")
+            if key == "chunk_overlap" and not (0 <= cast_value <= 500):
+                errors.append(f"chunk_overlap must be 0-500, got {cast_value}")
                 continue
 
-            _runtime_settings[key] = cast_value
+            previous = _rt.get(key)
+            _rt.set_override(key, cast_value)
             applied[key] = cast_value
+            if key == "ollama_model" and previous != cast_value:
+                model_changed = True
         except (ValueError, TypeError) as e:
             errors.append(f"Invalid value for {key}: {e}")
+
+    # If the model was changed, drop all live RAG sessions so the next query
+    # rebuilds them with the new model. Without this, the override sits in
+    # the dict but existing sessions keep using the old model forever.
+    if model_changed:
+        try:
+            from api.query import _sessions as _query_sessions
+            cleared = len(_query_sessions)
+            _query_sessions.clear()
+            logger.info(f"Model changed — cleared {cleared} RAG session(s)")
+        except Exception as e:
+            logger.warning(f"Could not clear RAG sessions after model change: {e}")
 
     return {
         "success": len(errors) == 0,
         "applied": applied,
-        "errors": errors
+        "errors": errors,
+        "model_changed": model_changed,
     }
 
 @app.post("/api/settings/reset")
 async def reset_settings():
     """Reset all runtime settings to config defaults."""
-    global _runtime_settings
-    _runtime_settings = {}
+    _rt.clear_overrides()
+    try:
+        from api.query import _sessions as _query_sessions
+        _query_sessions.clear()
+    except Exception:
+        pass
     return {"success": True, "message": "All settings reset to defaults"}
 
 

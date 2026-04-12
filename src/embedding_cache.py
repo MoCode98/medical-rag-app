@@ -31,7 +31,7 @@ class EmbeddingCache:
         self._stats_file = self.cache_dir / "cache_stats.json"
         self.stats = self._load_stats()
 
-        logger.info(f"Initialized embedding cache at {self.cache_dir}")
+        logger.debug(f"Initialized embedding cache at {self.cache_dir}")
 
     def _load_stats(self) -> dict[str, int]:
         """Load stats from disk, or return defaults."""

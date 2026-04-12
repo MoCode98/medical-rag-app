@@ -42,7 +42,7 @@ class IngestionProgress:
                 self.started_at = data.get("started_at", "")
                 self.last_updated = data.get("last_updated", "")
 
-                logger.info(
+                logger.debug(
                     f"Loaded progress: {len(self.processed_files)} processed, "
                     f"{len(self.failed_files)} failed"
                 )

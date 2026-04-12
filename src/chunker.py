@@ -217,11 +217,31 @@ class IntelligentChunker:
             section_content, {"section": section_title, "document": doc.title}
         )
 
+        # Page-tracking state. The parser injects [Page N] markers per page,
+        # but only the chunk(s) that happen to contain a marker would otherwise
+        # know their own page. Chunks that sit mid-page have no marker — they
+        # need to inherit the last-seen page from the chunks before them.
+        # Seed with the first marker that appears anywhere in the section so
+        # the very first chunk(s) start on the right page even when that
+        # marker got pulled into a later chunk.
+        section_first_match = re.search(r"\[Page (\d+)\]", section_content)
+        running_page = int(section_first_match.group(1)) if section_first_match else 0
+
         # Create TextChunk objects
         chunks = []
         for i, chunk_text in enumerate(text_chunks):
-            # Extract page numbers from chunk text
-            page_numbers = self.extract_page_numbers(chunk_text)
+            # Find any markers inside this chunk
+            chunk_pages = self.extract_page_numbers(chunk_text)
+
+            if chunk_pages:
+                # This chunk contains its own marker(s) — use them and update
+                # running_page to the last marker so subsequent marker-less
+                # chunks inherit the right page.
+                page_numbers = chunk_pages
+                running_page = chunk_pages[-1]
+            else:
+                # No marker — inherit the page we were last on.
+                page_numbers = [running_page] if running_page else [0]
 
             # Remove page markers from content for cleaner text
             clean_content = re.sub(r"\[Page \d+\]\n?", "", chunk_text)
@@ -232,7 +252,7 @@ class IntelligentChunker:
                 source_file=doc.file_name,
                 source_title=doc.title,
                 section_title=section_title,
-                page_numbers=page_numbers if page_numbers else [0],
+                page_numbers=page_numbers,
                 chunk_index=i,
                 total_chunks=len(text_chunks),
                 token_count=self.count_tokens(clean_content),
@@ -275,8 +295,17 @@ class IntelligentChunker:
 
             text_chunks = self.split_text_by_tokens(doc.content, {"document": doc.title})
 
+            # Same page-inheritance logic as chunk_section — see comments there.
+            doc_first_match = re.search(r"\[Page (\d+)\]", doc.content)
+            running_page = int(doc_first_match.group(1)) if doc_first_match else 0
+
             for i, chunk_text in enumerate(text_chunks):
-                page_numbers = self.extract_page_numbers(chunk_text)
+                chunk_pages = self.extract_page_numbers(chunk_text)
+                if chunk_pages:
+                    page_numbers = chunk_pages
+                    running_page = chunk_pages[-1]
+                else:
+                    page_numbers = [running_page] if running_page else [0]
                 clean_content = re.sub(r"\[Page \d+\]\n?", "", chunk_text)
 
                 chunk = TextChunk(
@@ -285,7 +314,7 @@ class IntelligentChunker:
                     source_file=doc.file_name,
                     source_title=doc.title,
                     section_title=None,
-                    page_numbers=page_numbers if page_numbers else [0],
+                    page_numbers=page_numbers,
                     chunk_index=i,
                     total_chunks=len(text_chunks),
                     token_count=self.count_tokens(clean_content),

@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
     <style>
         /* Modern Color Palette */
         :root {
@@ -336,6 +337,151 @@
         /* Chat Message Enhancements */
         .chat-message > div:last-child {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Bot answer typography — clear hierarchy and breathing room */
+        .answer-prose {
+            color: #1f2937;
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+        .answer-prose h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #111827;
+            margin: 0.25rem 0 1rem 0;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e5e7eb;
+            line-height: 1.3;
+        }
+        .answer-prose h2 {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #111827;
+            margin: 1.5rem 0 0.75rem 0;
+            line-height: 1.35;
+        }
+        .answer-prose h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 1.25rem 0 0.5rem 0;
+            line-height: 1.4;
+        }
+        .answer-prose h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #374151;
+            margin: 1rem 0 0.4rem 0;
+        }
+        .answer-prose p {
+            margin: 0 0 1.05rem 0;
+        }
+        .answer-prose p:last-child {
+            margin-bottom: 0;
+        }
+        .answer-prose ul, .answer-prose ol {
+            margin: 0.5rem 0 1.05rem 0;
+            padding-left: 1.5rem;
+        }
+        .answer-prose li {
+            margin: 0.35rem 0;
+        }
+        .answer-prose li > p {
+            margin: 0;
+        }
+        .answer-prose strong {
+            color: #111827;
+            font-weight: 600;
+        }
+        .answer-prose code {
+            background: #f3f4f6;
+            color: #be185d;
+            padding: 0.1rem 0.35rem;
+            border-radius: 0.25rem;
+            font-size: 0.875em;
+        }
+        .answer-prose pre {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            margin: 1rem 0;
+            overflow-x: auto;
+        }
+        .answer-prose pre code {
+            background: none;
+            color: inherit;
+            padding: 0;
+        }
+        .answer-prose blockquote {
+            border-left: 3px solid #c7d2fe;
+            background: #eef2ff;
+            color: #3730a3;
+            padding: 0.5rem 0.9rem;
+            margin: 1rem 0;
+            border-radius: 0 0.375rem 0.375rem 0;
+        }
+
+        /* PDF.js text layer (Phase 2: chunk highlighting) */
+        .pdf-page-wrapper {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+        }
+        .pdf-text-layer {
+            position: absolute;
+            left: 0;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            overflow: hidden;
+            line-height: 1.0;
+            transform-origin: 0 0;
+            z-index: 2;
+            opacity: 0.999;
+        }
+        .pdf-text-layer span,
+        .pdf-text-layer br {
+            color: transparent;
+            position: absolute;
+            white-space: pre;
+            cursor: text;
+            transform-origin: 0% 0%;
+        }
+        .pdf-text-layer span.pdf-chunk-highlight {
+            background-color: rgba(252, 211, 77, 0.5);
+            box-shadow: 0 0 0 1.5px rgba(245, 158, 11, 0.55);
+            border-radius: 2px;
+        }
+        .pdf-text-layer ::selection {
+            background-color: rgba(0, 100, 255, 0.28);
+        }
+
+        /* Inline citation: small superscript number, like a textbook */
+        .citation {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.05rem;
+            height: 1.05rem;
+            padding: 0 0.25rem;
+            margin: 0 0.1rem;
+            font-size: 0.65rem;
+            font-weight: 700;
+            color: #1d4ed8;
+            background: #dbeafe;
+            border-radius: 0.25rem;
+            vertical-align: super;
+            line-height: 1;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.15s ease;
+        }
+        .citation:hover {
+            background: #bfdbfe;
+            color: #1e3a8a;
+            transform: translateY(-1px);
         }
 
         .chat-message:hover > div:last-child {
@@ -821,6 +967,13 @@
                                 <option value="">Loading models...</option>
                             </select>
                             <p class="text-xs text-gray-500 mt-1">Ollama model used for generating answers</p>
+                            <div class="mt-2 flex gap-2">
+                                <input id="settings-new-model" type="text" class="modern-input flex-1 text-sm" placeholder="Pull new model (e.g. llama3.2:latest)">
+                                <button onclick="pullNewModel()" id="settings-pull-btn" class="px-3 py-1.5 text-sm bg-gradient-to-br from-blue-500 to-indigo-600 text-white rounded-lg hover:from-blue-600 hover:to-indigo-700 transition-colors">
+                                    Pull
+                                </button>
+                            </div>
+                            <p id="settings-pull-status" class="text-xs text-gray-500 mt-1 hidden"></p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Ollama URL</label>
@@ -975,6 +1128,64 @@
         </main>
     </div>
 
+    <!-- PDF Viewer Modal — z-[60] so it sits above the chunk preview modal (z-50) -->
+    <div id="pdf-viewer-modal" class="fixed inset-0 z-[60] hidden">
+        <div class="absolute inset-0 bg-black bg-opacity-70 backdrop-blur-sm" onclick="closePdfViewer()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-[92vh] flex flex-col relative">
+                <!-- Header -->
+                <div class="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="h-9 w-9 rounded-lg bg-gradient-to-br from-red-500 to-pink-600 flex items-center justify-center flex-shrink-0">
+                            <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                        </div>
+                        <h3 id="pdf-viewer-title" class="text-base font-semibold text-gray-900 truncate"></h3>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <a id="pdf-viewer-download" href="#" download class="text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded px-3 py-1.5 transition-colors">Download</a>
+                        <a id="pdf-viewer-newtab" href="#" target="_blank" class="text-xs font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded px-3 py-1.5 transition-colors">Open in new tab</a>
+                        <button onclick="closePdfViewer()" class="text-gray-400 hover:text-gray-600 p-1">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <!-- Toolbar (page nav + zoom). Hidden when fallback iframe is in use. -->
+                <div id="pdf-viewer-toolbar" class="px-4 py-2 border-b border-gray-200 flex items-center gap-3 bg-gray-50 flex-shrink-0 text-xs">
+                    <button onclick="pdfPrevPage()" id="pdf-prev-btn" class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-white" title="Previous page (←)">
+                        ← Prev
+                    </button>
+                    <div class="flex items-center gap-1 text-gray-700">
+                        <input id="pdf-page-input" type="number" min="1" value="1" onchange="pdfGoToPage(parseInt(this.value, 10))" class="w-14 text-center border border-gray-300 rounded px-1 py-1 bg-white focus:outline-none focus:border-blue-400" />
+                        <span class="text-gray-500">/</span>
+                        <span id="pdf-page-total" class="font-medium text-gray-700">1</span>
+                    </div>
+                    <button onclick="pdfNextPage()" id="pdf-next-btn" class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-white" title="Next page (→)">
+                        Next →
+                    </button>
+                    <div class="flex-1"></div>
+                    <button onclick="pdfZoomOut()" class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100" title="Zoom out (−)">−</button>
+                    <span id="pdf-zoom-label" class="text-gray-700 font-medium w-12 text-center">125%</span>
+                    <button onclick="pdfZoomIn()" class="px-2.5 py-1 rounded border border-gray-300 bg-white hover:bg-gray-100" title="Zoom in (+)">+</button>
+                </div>
+                <!-- Canvas wrapper -->
+                <div id="pdf-viewer-body" class="flex-1 bg-gray-100 overflow-auto rounded-b-2xl flex items-start justify-center p-4">
+                    <div id="pdf-viewer-loading" class="hidden flex items-center gap-3 text-gray-500 py-12">
+                        <div class="spinner"></div>
+                        <span>Loading PDF...</span>
+                    </div>
+                    <div id="pdf-page-wrapper" class="pdf-page-wrapper shadow-lg">
+                        <canvas id="pdf-viewer-canvas" class="bg-white block"></canvas>
+                        <div id="pdf-viewer-textlayer" class="pdf-text-layer"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Chunk Preview Modal -->
     <div id="preview-modal" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black bg-opacity-50 backdrop-blur-sm" onclick="closePreviewModal()"></div>
@@ -1092,6 +1303,8 @@
         let currentQueryInterval = null;
         let currentLoadingId = null;
         let isQueryInProgress = false;
+        let lastSubmittedQuestion = '';
+        let modelChangePromptOpen = false;
 
         // Security: HTML escaping utility function
         function escapeHtml(unsafe) {
@@ -1293,6 +1506,8 @@
             [modelSelect, topKInput, tempInput].forEach(el => {
                 el.addEventListener('change', showConfigUpdateNotification);
             });
+            // Mid-query model swap prompt — runs first so it can intercept.
+            modelSelect.addEventListener('change', handleModelChange);
 
             // Add keyboard navigation for tabs
             document.addEventListener('keydown', handleGlobalKeydown);
@@ -1598,6 +1813,17 @@
                                             </div>
                                         </div>
                                     </div>
+                                    <button onclick="viewPdf('${safeFile}')" class="flex-shrink-0 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded p-1.5 transition-colors opacity-0 group-hover:opacity-100" title="View this PDF">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                        </svg>
+                                    </button>
+                                    <button onclick="rechunkFile('${safeFile}')" class="flex-shrink-0 text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded p-1.5 transition-colors opacity-0 group-hover:opacity-100" title="Re-chunk this file with current settings">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                        </svg>
+                                    </button>
                                     <button onclick="deleteIngestedFile('${safeFile}')" class="flex-shrink-0 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded p-1.5 transition-colors opacity-0 group-hover:opacity-100" title="Remove this file">
                                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
@@ -1687,6 +1913,418 @@
             document.getElementById('delete-modal-filename').textContent = filename;
             document.getElementById('delete-modal-delete-file').checked = false;
             document.getElementById('delete-modal').classList.remove('hidden');
+        }
+
+        // ===== PDF.js Viewer (Phase 1: navigation only, no highlighting) =====
+
+        // Configure the PDF.js worker once on load. CDN-matched version.
+        if (window.pdfjsLib) {
+            pdfjsLib.GlobalWorkerOptions.workerSrc =
+                'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+        }
+
+        // Viewer state
+        let pdfDoc = null;
+        let pdfPageNum = 1;
+        let pdfTotalPages = 0;
+        let pdfScale = 1.25;
+        let pdfRenderTask = null;
+        let pdfChunkText = null;       // text to highlight on the current page
+        let pdfChunkHighlighted = false; // whether we've already shown the "match found" toast
+
+        async function viewPdf(filename, pageNumber = 1, chunkText = null) {
+            const url = `/api/ingest/pdf/${encodeURIComponent(filename)}`;
+            document.getElementById('pdf-viewer-title').textContent = filename;
+            document.getElementById('pdf-viewer-download').href = url;
+            document.getElementById('pdf-viewer-newtab').href = url;
+            document.getElementById('pdf-viewer-modal').classList.remove('hidden');
+
+            // Stash the chunk text for highlighting after each render
+            pdfChunkText = chunkText && chunkText.trim() ? chunkText.trim() : null;
+            pdfChunkHighlighted = false;
+
+            // Fallback: PDF.js failed to load (CDN blocked / offline). Use a
+            // throwaway iframe in the canvas wrapper instead.
+            if (!window.pdfjsLib) {
+                console.warn('PDF.js not loaded — falling back to native iframe viewer. Check the network tab for cdn.jsdelivr.net pdf.min.js.');
+                showToast('PDF.js failed to load; using fallback viewer', 'info');
+                const body = document.getElementById('pdf-viewer-body');
+                document.getElementById('pdf-viewer-toolbar').classList.add('hidden');
+                body.innerHTML = `<iframe src="${url}" class="w-full h-full border-0" title="PDF viewer"></iframe>`;
+                return;
+            }
+
+            // Show loading spinner, hide page wrapper while we fetch
+            const loading = document.getElementById('pdf-viewer-loading');
+            const wrapper = document.getElementById('pdf-page-wrapper');
+            loading.classList.remove('hidden');
+            if (wrapper) wrapper.style.visibility = 'hidden';
+
+            // Tear down any previous doc
+            if (pdfDoc) {
+                try { await pdfDoc.destroy(); } catch (_) {}
+                pdfDoc = null;
+            }
+
+            try {
+                pdfDoc = await pdfjsLib.getDocument(url).promise;
+                pdfTotalPages = pdfDoc.numPages;
+                pdfPageNum = Math.max(1, Math.min(pageNumber || 1, pdfTotalPages));
+                document.getElementById('pdf-page-total').textContent = pdfTotalPages;
+                document.getElementById('pdf-page-input').max = pdfTotalPages;
+                await renderPdfPage(pdfPageNum);
+            } catch (err) {
+                console.error('PDF load failed:', err);
+                showToast('Failed to load PDF: ' + err.message, 'error');
+                loading.classList.add('hidden');
+            }
+        }
+
+        async function renderPdfPage(num) {
+            if (!pdfDoc) return;
+            pdfPageNum = Math.max(1, Math.min(num, pdfTotalPages));
+
+            // Cancel any in-flight render to prevent overlapping draws
+            if (pdfRenderTask) {
+                try { pdfRenderTask.cancel(); } catch (_) {}
+                pdfRenderTask = null;
+            }
+
+            const loading = document.getElementById('pdf-viewer-loading');
+            const wrapper = document.getElementById('pdf-page-wrapper');
+            const canvas = document.getElementById('pdf-viewer-canvas');
+            const textLayerDiv = document.getElementById('pdf-viewer-textlayer');
+
+            try {
+                const page = await pdfDoc.getPage(pdfPageNum);
+                const viewport = page.getViewport({ scale: pdfScale });
+
+                // Use device pixel ratio for crisp rendering on retina screens
+                const dpr = window.devicePixelRatio || 1;
+                canvas.width = Math.floor(viewport.width * dpr);
+                canvas.height = Math.floor(viewport.height * dpr);
+                canvas.style.width = Math.floor(viewport.width) + 'px';
+                canvas.style.height = Math.floor(viewport.height) + 'px';
+
+                const ctx = canvas.getContext('2d');
+                pdfRenderTask = page.render({
+                    canvasContext: ctx,
+                    viewport: viewport,
+                    transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null,
+                });
+                await pdfRenderTask.promise;
+                pdfRenderTask = null;
+
+                // Render the text layer (selectable, used for highlighting)
+                let textDivs = [];
+                try {
+                    textDivs = await renderTextLayerForPage(page, viewport, textLayerDiv);
+                } catch (e) {
+                    console.warn('Text layer render failed:', e);
+                }
+
+                // Apply chunk highlighting if a chunk text was provided.
+                // Re-applied on every page render so navigation/zoom keep it.
+                if (pdfChunkText && textDivs && textDivs.length) {
+                    const matchedFirst = highlightChunkInTextLayer(textDivs, pdfChunkText);
+                    if (matchedFirst && !pdfChunkHighlighted) {
+                        pdfChunkHighlighted = true;
+                        // Defer scroll until layout settles
+                        setTimeout(() => {
+                            try {
+                                matchedFirst.scrollIntoView({
+                                    behavior: 'smooth',
+                                    block: 'center',
+                                    inline: 'nearest',
+                                });
+                            } catch (_) {}
+                        }, 100);
+                    }
+                }
+
+                loading.classList.add('hidden');
+                if (wrapper) wrapper.style.visibility = '';
+
+                // Sync UI
+                document.getElementById('pdf-page-input').value = pdfPageNum;
+                document.getElementById('pdf-zoom-label').textContent =
+                    Math.round(pdfScale * 100) + '%';
+                document.getElementById('pdf-prev-btn').disabled = pdfPageNum <= 1;
+                document.getElementById('pdf-next-btn').disabled = pdfPageNum >= pdfTotalPages;
+            } catch (err) {
+                if (err && err.name === 'RenderingCancelledException') return;
+                console.error('PDF render failed:', err);
+                showToast('Failed to render page: ' + err.message, 'error');
+            }
+        }
+
+        // Render the PDF.js text layer into `container`. Returns the array of
+        // span divs PDF.js created (one per text item) so we can highlight.
+        async function renderTextLayerForPage(page, viewport, container) {
+            container.innerHTML = '';
+            container.style.width = Math.floor(viewport.width) + 'px';
+            container.style.height = Math.floor(viewport.height) + 'px';
+            // Required by PDF.js 4.x text-layer math (no-op on v3 but harmless)
+            container.style.setProperty('--scale-factor', String(viewport.scale));
+
+            const textContent = await page.getTextContent();
+            const textDivs = [];
+
+            if (typeof pdfjsLib.renderTextLayer === 'function') {
+                // v3 expects `textContent`. v4 added `textContentSource`. Pass
+                // both so the call works on either version.
+                const params = {
+                    textContent: textContent,
+                    textContentSource: textContent,
+                    container: container,
+                    viewport: viewport,
+                    textDivs: textDivs,
+                };
+                const task = pdfjsLib.renderTextLayer(params);
+                // v3 returns a TextLayerRenderTask; v4 may return a plain promise
+                await (task && task.promise ? task.promise : task);
+            } else if (typeof pdfjsLib.TextLayer === 'function') {
+                const layer = new pdfjsLib.TextLayer({
+                    textContentSource: textContent,
+                    container: container,
+                    viewport: viewport,
+                });
+                await layer.render();
+            }
+
+            // Some PDF.js versions don't populate textDivs — query the
+            // container as a fallback.
+            if (!textDivs.length) {
+                container.querySelectorAll('span').forEach(s => textDivs.push(s));
+            }
+            return textDivs;
+        }
+
+        // Find the chunk text inside the rendered text layer and add the
+        // .pdf-chunk-highlight class to the matching spans. Returns the first
+        // matched span (for scrolling) or null if no match.
+        function highlightChunkInTextLayer(textDivs, chunkText) {
+            // Normalize text the same way for both haystack and needle so the
+            // substring search ignores whitespace, hyphenated line breaks,
+            // markdown syntax, and case. The chunker stores chunks as the
+            // markdown produced by pymupdf4llm — that has `##`, `**`, bullets,
+            // table pipes, etc. — none of which exist in the PDF text layer.
+            // Strip all of those down to just letters and digits so the match
+            // is robust against any formatting difference.
+            const normalize = (s) => (s || '')
+                .replace(/-\s*\n/g, '')         // join hyphenated line breaks
+                .replace(/[^a-z0-9\s]/gi, ' ')  // strip punctuation + markdown syntax
+                .replace(/\s+/g, ' ')           // collapse whitespace
+                .toLowerCase()
+                .trim();
+
+            const needleFull = normalize(chunkText);
+            if (needleFull.length < 15) return null;
+
+            // Build a flat normalized haystack AND record, for each char in
+            // that haystack, which textDiv it came from.
+            // - haystack: the concatenated normalized text of all divs
+            // - divOfChar[i]: index of the div that contributed haystack[i]
+            let haystack = '';
+            const divOfChar = [];
+            for (let i = 0; i < textDivs.length; i++) {
+                const div = textDivs[i];
+                if (!div || div.tagName === 'BR') continue;
+                const raw = div.textContent || '';
+                if (!raw.trim()) continue;
+                const piece = normalize(raw);
+                if (!piece) continue;
+                // Separator space (so words from adjacent divs don't fuse)
+                if (haystack.length > 0) {
+                    haystack += ' ';
+                    divOfChar.push(-1);
+                }
+                for (let c = 0; c < piece.length; c++) divOfChar.push(i);
+                haystack += piece;
+            }
+
+            if (haystack.length === 0) return null;
+
+            // Try progressively shorter probes — robust against column breaks
+            // and ligatures that may corrupt the middle of the chunk text.
+            const probes = [
+                needleFull.substring(0, 120),
+                needleFull.substring(0, 80),
+                needleFull.substring(0, 50),
+                needleFull.substring(0, 30),
+            ].filter(p => p.length >= 15);
+
+            let matchStart = -1;
+            for (const probe of probes) {
+                matchStart = haystack.indexOf(probe);
+                if (matchStart !== -1) break;
+            }
+            if (matchStart === -1) {
+                console.warn('[PDF highlight] No match found.', {
+                    needlePreview: needleFull.substring(0, 120),
+                    haystackPreview: haystack.substring(0, 200),
+                    haystackLen: haystack.length,
+                    divCount: textDivs.length,
+                });
+                return null;
+            }
+
+            // Determine the highlight char span — cover the chunk length but
+            // cap so we don't paint the whole page.
+            const matchEnd = Math.min(
+                matchStart + Math.min(needleFull.length, 1500),
+                haystack.length
+            );
+
+            // Collect all distinct div indices touched by [matchStart, matchEnd).
+            const touched = new Set();
+            for (let i = matchStart; i < matchEnd; i++) {
+                const di = divOfChar[i];
+                if (di >= 0) touched.add(di);
+            }
+
+            let firstHighlighted = null;
+            // Iterate textDivs in order so the FIRST highlighted div is the
+            // earliest one in the page (for scroll-into-view).
+            for (let i = 0; i < textDivs.length; i++) {
+                if (!touched.has(i)) continue;
+                const div = textDivs[i];
+                if (!div) continue;
+                div.classList.add('pdf-chunk-highlight');
+                if (!firstHighlighted) firstHighlighted = div;
+            }
+            return firstHighlighted;
+        }
+
+        function pdfPrevPage() {
+            if (pdfPageNum > 1) renderPdfPage(pdfPageNum - 1);
+        }
+
+        function pdfNextPage() {
+            if (pdfPageNum < pdfTotalPages) renderPdfPage(pdfPageNum + 1);
+        }
+
+        function pdfGoToPage(n) {
+            if (!Number.isFinite(n)) return;
+            renderPdfPage(n);
+        }
+
+        function pdfZoomIn() {
+            pdfScale = Math.min(3.0, +(pdfScale + 0.25).toFixed(2));
+            renderPdfPage(pdfPageNum);
+        }
+
+        function pdfZoomOut() {
+            pdfScale = Math.max(0.5, +(pdfScale - 0.25).toFixed(2));
+            renderPdfPage(pdfPageNum);
+        }
+
+        async function closePdfViewer() {
+            const modal = document.getElementById('pdf-viewer-modal');
+            modal.classList.add('hidden');
+
+            if (pdfRenderTask) {
+                try { pdfRenderTask.cancel(); } catch (_) {}
+                pdfRenderTask = null;
+            }
+            if (pdfDoc) {
+                try { await pdfDoc.destroy(); } catch (_) {}
+                pdfDoc = null;
+            }
+            pdfPageNum = 1;
+            pdfTotalPages = 0;
+            pdfChunkText = null;
+            pdfChunkHighlighted = false;
+
+            // Clear text layer so old highlights don't flash on next open
+            const textLayer = document.getElementById('pdf-viewer-textlayer');
+            if (textLayer) textLayer.innerHTML = '';
+
+            // If the fallback iframe was rendered into the body, restore the
+            // canvas markup so the next open works with PDF.js again.
+            const body = document.getElementById('pdf-viewer-body');
+            if (body.querySelector('iframe')) {
+                body.innerHTML = `
+                    <div id="pdf-viewer-loading" class="hidden flex items-center gap-3 text-gray-500 py-12">
+                        <div class="spinner"></div>
+                        <span>Loading PDF...</span>
+                    </div>
+                    <div id="pdf-page-wrapper" class="pdf-page-wrapper shadow-lg">
+                        <canvas id="pdf-viewer-canvas" class="bg-white block"></canvas>
+                        <div id="pdf-viewer-textlayer" class="pdf-text-layer"></div>
+                    </div>
+                `;
+                document.getElementById('pdf-viewer-toolbar').classList.remove('hidden');
+            }
+        }
+
+        // Keyboard shortcuts: Escape closes; arrows page; +/- zoom.
+        // Active only when the viewer modal is open and the user isn't
+        // typing into the page input.
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('pdf-viewer-modal');
+            if (!modal || modal.classList.contains('hidden')) return;
+            const tag = (document.activeElement && document.activeElement.tagName) || '';
+            const isTyping = tag === 'INPUT' || tag === 'TEXTAREA';
+
+            if (e.key === 'Escape') {
+                closePdfViewer();
+                return;
+            }
+            if (isTyping) return;
+            if (e.key === 'ArrowLeft') { e.preventDefault(); pdfPrevPage(); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); pdfNextPage(); }
+            else if (e.key === '+' || e.key === '=') { e.preventDefault(); pdfZoomIn(); }
+            else if (e.key === '-' || e.key === '_') { e.preventDefault(); pdfZoomOut(); }
+        });
+
+        async function rechunkFile(filename) {
+            // Prompt for optional custom chunk size; blank = use current settings.
+            const sizeRaw = prompt(
+                `Re-chunk "${filename}"?\n\n` +
+                `Leave blank to use current settings (chunk_size from Settings tab),\n` +
+                `or enter a custom chunk size in tokens (e.g. 800).`,
+                ''
+            );
+            if (sizeRaw === null) return; // user cancelled
+
+            const body = {};
+            if (sizeRaw.trim()) {
+                const size = parseInt(sizeRaw.trim(), 10);
+                if (isNaN(size) || size < 100 || size > 4096) {
+                    showToast('Chunk size must be a number between 100 and 4096', 'error');
+                    return;
+                }
+                body.chunk_size = size;
+                // Sensible default overlap = 20% of chunk size, capped at 200
+                body.chunk_overlap = Math.min(200, Math.floor(size * 0.2));
+            }
+
+            showToast(`Re-chunking ${filename}...`, 'info');
+            try {
+                const resp = await fetchWithTimeout(
+                    `/api/ingest/rechunk/${encodeURIComponent(filename)}`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    },
+                    300000  // 5 min — embedding can be slow on big PDFs
+                );
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok || !data.success) {
+                    showToast(data.detail || 'Re-chunk failed', 'error');
+                    return;
+                }
+                showToast(
+                    `Rechunked ${filename}: ${data.old_chunk_count} → ${data.new_chunk_count} chunks (size ${data.chunk_size})`,
+                    'success'
+                );
+                updateFileStatus();
+            } catch (e) {
+                console.error('Rechunk failed:', e);
+                showToast('Re-chunk failed: ' + e.message, 'error');
+            }
         }
 
         function closeDeleteModal() {
@@ -1830,6 +2468,29 @@
             document.getElementById('preview-modal').classList.add('hidden');
         }
 
+        async function deleteChunkRow(btnEl) {
+            const row = btnEl.closest('.chunk-row');
+            if (!row) return;
+            const chunkId = row.dataset.chunkId;
+            if (!chunkId) return;
+            if (!confirm('Delete this chunk from the vector database? This cannot be undone.')) return;
+            try {
+                const resp = await fetchWithTimeout(`/api/metrics/chunk/${encodeURIComponent(chunkId)}`, {
+                    method: 'DELETE'
+                }, 15000);
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok || !data.success) {
+                    showToast(data.detail || 'Failed to delete chunk', 'error');
+                    return;
+                }
+                row.remove();
+                showToast('Chunk deleted', 'success');
+            } catch (e) {
+                console.error('Delete chunk failed:', e);
+                showToast('Failed to delete chunk', 'error');
+            }
+        }
+
         async function showChunkPreview(filename) {
             const modal = document.getElementById('preview-modal');
             const title = document.getElementById('preview-modal-title');
@@ -1868,27 +2529,42 @@
                 `;
 
                 // Chunks list
+                const safeFilename = filename.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 html += '<div class="space-y-3">';
                 chunks.forEach((chunk, i) => {
                     const pages = chunk.page_numbers && chunk.page_numbers.length > 0
                         ? chunk.page_numbers.join(', ') : '-';
+                    const firstPage = (chunk.page_numbers && chunk.page_numbers.length > 0)
+                        ? chunk.page_numbers[0] : 1;
                     const section = chunk.section_title && chunk.section_title !== 'N/A'
                         ? chunk.section_title : '';
                     const previewText = escapeHtml(chunk.content.substring(0, 200));
                     const fullText = escapeHtml(chunk.content);
                     const chunkId = `preview-chunk-${i}`;
 
+                    const realId = chunk.id;
                     html += `
-                        <div class="border border-gray-200 rounded-lg overflow-hidden hover:border-blue-200 transition-colors">
-                            <div class="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 cursor-pointer" onclick="togglePanel('${chunkId}')">
-                                <div class="flex items-center gap-2 text-xs min-w-0">
+                        <div data-chunk-id="${escapeHtml(realId)}" class="chunk-row border border-gray-200 rounded-lg overflow-hidden hover:border-blue-200 transition-colors">
+                            <div class="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                                <div class="flex items-center gap-2 text-xs min-w-0 cursor-pointer flex-1" onclick="togglePanel('${chunkId}')">
                                     <span class="bg-white border border-gray-300 text-gray-600 font-mono font-bold px-2 py-0.5 rounded">#${chunk.chunk_index}</span>
                                     ${section ? `<span class="text-gray-600 truncate">${escapeHtml(section)}</span>` : ''}
                                 </div>
                                 <div class="flex items-center gap-2 text-xs text-gray-400 flex-shrink-0">
                                     <span>${chunk.token_count || '?'} tokens</span>
                                     <span>p.${pages}</span>
-                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <button data-pdf-content="${escapeHtml(chunk.content)}" onclick="viewPdf('${safeFilename}', ${firstPage}, this.dataset.pdfContent)" title="View this chunk in the PDF (highlighted)" class="text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded p-1 transition-colors">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                                        </svg>
+                                    </button>
+                                    <button onclick="deleteChunkRow(this)" title="Delete this chunk" class="text-red-500 hover:text-red-700 hover:bg-red-50 rounded p-1 transition-colors">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"></path>
+                                        </svg>
+                                    </button>
+                                    <svg class="h-4 w-4 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" onclick="togglePanel('${chunkId}')">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
                                     </svg>
                                 </div>
@@ -2385,6 +3061,33 @@
             document.getElementById('logs-pause-btn').classList.add('hidden');
         }
 
+        // Mid-query model-change prompt: if a query is in flight, ask the
+        // user whether to abort + restart with the new model, or let the
+        // current query finish with the old model.
+        function handleModelChange(event) {
+            if (!isQueryInProgress || modelChangePromptOpen) return;
+            const newModel = event.target.value || 'default';
+            modelChangePromptOpen = true;
+            const restart = confirm(
+                'A query is currently running.\n\n' +
+                'OK = abort it and restart with "' + newModel + '"\n' +
+                'Cancel = let the current query finish with the previous model'
+            );
+            modelChangePromptOpen = false;
+            if (restart) {
+                const q = lastSubmittedQuestion;
+                stopQuery();
+                // Wait briefly for the abort to settle, then resubmit.
+                setTimeout(() => {
+                    const input = document.getElementById('query-input');
+                    if (input && q) {
+                        input.value = q;
+                        submitQuery();
+                    }
+                }, 250);
+            }
+        }
+
         // Configuration change notification
         function showConfigUpdateNotification() {
             const modelSelect = document.getElementById('model-select');
@@ -2408,9 +3111,13 @@
                 <span>Settings updated - will apply to next query</span>
             `;
 
-            // Insert after the config grid
-            const configSection = document.querySelector('#content-query .grid');
-            configSection.parentElement.insertBefore(notification, configSection.nextSibling);
+            // Anchor: the model select's parent. The Query tab redesign
+            // removed the old `.grid` class, so we use a stable element ID.
+            const anchor = document.getElementById('model-select');
+            if (!anchor || !anchor.parentElement || !anchor.parentElement.parentElement) {
+                return;
+            }
+            anchor.parentElement.parentElement.appendChild(notification);
 
             // Fade out after 3 seconds
             setTimeout(() => {
@@ -2497,6 +3204,9 @@
             const question = input.value.trim();
 
             if (!question) return;
+
+            // Track for potential mid-query restart
+            lastSubmittedQuestion = question;
 
             // Disable input
             input.disabled = true;
@@ -2755,6 +3465,7 @@
         function formatResponse(data) {
             const responseId = `response-${Date.now()}`;
             const rawAnswer = data.answer || '';
+            const sourcesId = `${responseId}-sources`;
 
             // Extract thinking content (e.g. <think>...</think> from deepseek-r1)
             let thinking = '';
@@ -2765,12 +3476,69 @@
                 cleanAnswer = rawAnswer.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
             }
 
-            // Parse the clean answer as markdown
-            const answerHtml = marked.parse(cleanAnswer);
+            // Strip any leftover legacy citation formats the model sometimes
+            // emits despite the system prompt. We keep ONLY clean [N] citations.
+            cleanAnswer = cleanAnswer
+                // [Source: foo.pdf, Page: 5]  →  removed
+                .replace(/\[Source:[^\]]*\]/gi, '')
+                // (Context 2) / (Context 2, page 5)  →  removed
+                .replace(/\(Context\s*\d+[^)]*\)/gi, '')
+                // [Context 3] / Context [3]  →  [3]
+                .replace(/Context\s*\[(\d+)\]/gi, '[$1]')
+                .replace(/\[Context\s*(\d+)\]/gi, '[$1]')
+                // "Context 2 outlines ..." / "Context 4 details ..."  →  drop the prefix
+                // "As Context 2 explains, X" → "X"
+                .replace(/\b(?:As\s+|In\s+)?Context\s+(\d+)\s+(?:outlines?|details?|describes?|explains?|notes?|states?|mentions?|provides?|shows?|highlights?|emphasi[sz]es?|discusses?|covers?|reports?)\b[^.,;:]*[.,;:]?\s*/gi,
+                         (m, n) => '')
+                // Generic "Context N <verb>" → blank
+                .replace(/\bContext\s+\d+\s+/gi, '')
+                // "outlined in 2" / "as detailed in 3" / "described in 4"  →  with [N]
+                .replace(/\b(?:outlined|detailed|described|explained|noted|mentioned|shown|reported|discussed|stated)\s+in\s+(\d+)\b/gi,
+                         '[$1]')
+                // "according to context 2" / "per context 4"  →  drop, add [N]
+                .replace(/\b(?:according\s+to|per|based\s+on|from|in)\s+context\s+(\d+)\b/gi, '[$1]')
+                // "Additional contexts provide..." / "These sources collectively..." →  removed sentence
+                .replace(/(?:Additional\s+contexts?|These\s+(?:sources|contexts|documents|references))\b[^.!?]*[.!?]\s*/gi, '')
+                // "the provided (research|context|documents|sources)" → "research"
+                .replace(/\bthe\s+provided\s+(research|context|documents?|sources?)\b/gi, 'research')
+                // Stray "the context" / "the documents" / "the sources" → ""
+                .replace(/\bthe\s+contexts?\b/gi, 'the research')
+                // collapse repeated spaces and trim
+                .replace(/[ \t]{2,}/g, ' ')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+
+            // Normalize headings the model sometimes ignores instructions about:
+            //  - Demote h4+ (####) down to h3 (###) so visual hierarchy stays clean
+            //  - Strip leading numbers from heading text ("## 1 Introduction" → "## Introduction")
+            //  - Drop a leading heading if it's the very first line (no top-of-answer titles)
+            cleanAnswer = cleanAnswer
+                .replace(/^#{4,6}\s/gm, '### ')
+                .replace(/^(#{1,3})\s+\d+[\.\)]?\s+/gm, '$1 ');
+            // If the answer opens with a heading, remove that opening heading
+            // line entirely — answers should start with prose, not a title.
+            cleanAnswer = cleanAnswer.replace(/^\s*#{1,6}[^\n]*\n+/, '');
+
+            // Parse markdown FIRST, then transform [N] tokens into clickable
+            // superscript citation pills. We do this on the HTML so the
+            // brackets can't get mangled by markdown parsing.
+            let answerHtml = marked.parse(cleanAnswer);
+            answerHtml = answerHtml.replace(
+                /\[(\d+)\](?:\[(\d+)\])?(?:\[(\d+)\])?(?:\[(\d+)\])?/g,
+                (match) => {
+                    // Pull every [N] out of the matched group and render each
+                    // as its own pill so [1][3] renders as two badges.
+                    const nums = match.match(/\d+/g) || [];
+                    return nums.map(n =>
+                        `<a href="#${sourcesId}" onclick="openSourcesPanel('${sourcesId}', ${n}); return false;" class="citation" title="Source ${n}">${n}</a>`
+                    ).join('');
+                }
+            );
+            // Wrap in our typography class
+            answerHtml = `<div class="answer-prose">${answerHtml}</div>`;
 
             // Build the toolbar buttons
             const thinkingId = `${responseId}-thinking`;
-            const sourcesId = `${responseId}-sources`;
             const safeModel = escapeHtml(data.model_used);
             const safeQueryTime = data.query_time.toFixed(2);
 
@@ -2824,20 +3592,29 @@
                 let sourcesList = '';
                 data.sources.forEach((source, i) => {
                     const safeFile = escapeHtml(source.file);
+                    const safeFileAttr = (source.file || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     const safeTitle = escapeHtml(source.title || 'Unknown');
                     const pages = source.pages && source.pages.length > 0 ? source.pages.join(', ') : '?';
+                    const firstPage = (source.pages && source.pages.length > 0) ? source.pages[0] : 1;
                     const safeSimilarity = (source.similarity * 100).toFixed(1);
                     const sourceContextId = `${responseId}-src-ctx-${i}`;
                     const safeContext = escapeHtml(source.context ? source.context.substring(0, 300) + '...' : 'No context available');
+                    const safeContentAttr = escapeHtml(source.context || '');
 
                     sourcesList += `
-                        <div class="p-2.5 bg-white border border-blue-100 rounded-lg">
+                        <div id="${sourcesId}-item-${i + 1}" class="p-2.5 bg-white border border-blue-100 rounded-lg transition-all">
                             <div class="flex items-start justify-between gap-2">
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-xs font-semibold text-gray-900 truncate">${i + 1}. ${safeFile}</div>
-                                    <div class="text-xs text-gray-500 mt-0.5">${safeTitle} &middot; p.${pages} &middot; ${safeSimilarity}% match</div>
+                                <div class="flex-1 min-w-0 flex items-start gap-2">
+                                    <span class="flex-shrink-0 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-blue-700 bg-blue-100 rounded">${i + 1}</span>
+                                    <div class="min-w-0">
+                                        <div class="text-xs font-semibold text-gray-900 truncate">${safeFile}</div>
+                                        <div class="text-xs text-gray-500 mt-0.5">${safeTitle} &middot; p.${pages} &middot; ${safeSimilarity}% match</div>
+                                    </div>
                                 </div>
-                                <button onclick="togglePanel('${sourceContextId}', this)" class="text-xs text-blue-600 hover:text-blue-800 underline flex-shrink-0">context</button>
+                                <div class="flex items-center gap-2 flex-shrink-0">
+                                    <button data-pdf-content="${safeContentAttr}" onclick="viewPdf('${safeFileAttr}', ${firstPage}, this.dataset.pdfContent)" class="text-xs text-blue-600 hover:text-blue-800 underline" title="Open this passage in the PDF (highlighted)">view</button>
+                                    <button onclick="togglePanel('${sourceContextId}', this)" class="text-xs text-blue-600 hover:text-blue-800 underline">context</button>
+                                </div>
                             </div>
                             <div id="${sourceContextId}" class="hidden mt-2 p-2 bg-gray-50 rounded text-xs text-gray-700 border border-gray-200">${safeContext}</div>
                         </div>`;
@@ -2856,6 +3633,25 @@
             }
 
             return answerHtml + toolbar + thinkingPanel + sourcesPanel;
+        }
+
+        // Open the sources panel for a response and scroll a specific source
+        // into view. Used by inline citation pills like [1].
+        function openSourcesPanel(panelId, sourceNumber) {
+            const panel = document.getElementById(panelId);
+            if (!panel) return;
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+            }
+            // Highlight the targeted source
+            const target = document.getElementById(`${panelId}-item-${sourceNumber}`);
+            if (target) {
+                panel.scrollTop = Math.max(0, target.offsetTop - panel.offsetTop - 8);
+                target.classList.add('ring-2', 'ring-blue-400');
+                setTimeout(() => target.classList.remove('ring-2', 'ring-blue-400'), 1500);
+            } else {
+                panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
         }
 
         function togglePanel(panelId, button) {
@@ -3076,6 +3872,53 @@
         // Settings Management
         // =====================
 
+        async function pullNewModel() {
+            const input = document.getElementById('settings-new-model');
+            const btn = document.getElementById('settings-pull-btn');
+            const status = document.getElementById('settings-pull-status');
+            const modelName = (input.value || '').trim();
+            if (!modelName) {
+                showToast('Enter a model name first', 'error');
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = 'Pulling...';
+            status.classList.remove('hidden');
+            status.classList.remove('text-red-500');
+            status.classList.add('text-gray-500');
+            status.textContent = `Downloading ${modelName} — this can take several minutes for large models...`;
+            try {
+                const resp = await fetchWithTimeout('/api/query/models/pull', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: modelName })
+                }, 900000); // 15 min
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok || !data.success) {
+                    status.classList.remove('text-gray-500');
+                    status.classList.add('text-red-500');
+                    status.textContent = data.detail || 'Pull failed';
+                    showToast('Failed to pull model', 'error');
+                    return;
+                }
+                status.textContent = `Pulled ${modelName} successfully`;
+                showToast(`Model ${modelName} pulled`, 'success');
+                input.value = '';
+                // Refresh dropdown so the new model appears
+                await loadSettings();
+                document.getElementById('settings-model').value = modelName;
+            } catch (e) {
+                console.error('Pull failed:', e);
+                status.classList.remove('text-gray-500');
+                status.classList.add('text-red-500');
+                status.textContent = 'Pull failed: ' + e.message;
+                showToast('Failed to pull model', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Pull';
+            }
+        }
+
         async function loadSettings() {
             try {
                 const [settingsResp, modelsResp] = await Promise.all([
@@ -3097,6 +3940,10 @@
                     if (m === s.ollama_model) opt.selected = true;
                     modelSelect.appendChild(opt);
                 });
+                // Re-attach mid-query model-swap prompt (idempotent — removes
+                // the listener first so we don't stack handlers across reloads).
+                modelSelect.removeEventListener('change', handleModelChange);
+                modelSelect.addEventListener('change', handleModelChange);
 
                 // Populate fields
                 document.getElementById('settings-ollama-url').value = s.ollama_base_url;
@@ -3170,6 +4017,18 @@
                     }
                     if (updates.temperature !== undefined) {
                         document.getElementById('temperature-input').value = updates.temperature;
+                    }
+                    // Refresh the Query tab model dropdown so it shows the
+                    // new default. loadAvailableModels rebuilds the <option>
+                    // list — afterwards we re-select the saved model.
+                    if (updates.ollama_model) {
+                        try {
+                            await loadAvailableModels();
+                            const querySelect = document.getElementById('model-select');
+                            if (querySelect) querySelect.value = updates.ollama_model;
+                        } catch (e) {
+                            console.warn('Could not refresh Query model dropdown:', e);
+                        }
                     }
                 }
             } catch (error) {
